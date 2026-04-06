@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { useStore } from "../context/StoreContext";
 import {
@@ -9,22 +8,27 @@ import {
   FaArrowLeft,
   FaCheckCircle,
   FaTruck,
-  FaShieldAlt,
-  FaCreditCard,
+  FaLock,
   FaEye,
   FaShoppingCart,
-  FaGift,
-  FaLock,
   FaTag,
+  FaHeart,
+  FaRegHeart,
 } from "react-icons/fa";
 import { Link, useNavigate } from "react-router-dom";
 
 const CartPage = () => {
-  const { cart, removeFromCart, updateQuantity, getCartTotal } = useStore();
+  const {
+    cart,
+    removeFromCart,
+    updateQuantity,
+    getCartTotal,
+    wishlist,
+    addToWishlist,
+    removeFromWishlist,
+  } = useStore();
   const navigate = useNavigate();
   const [showNotification, setShowNotification] = useState(false);
-  const [orderPlaced, setOrderPlaced] = useState(false);
-  const [selectedProduct, setSelectedProduct] = useState(null);
 
   const subtotal = getCartTotal();
   const shipping = subtotal > 100 ? 0 : 10;
@@ -32,99 +36,13 @@ const CartPage = () => {
   const total = subtotal + shipping + tax;
   const totalItems = cart.reduce((sum, item) => sum + item.quantity, 0);
 
+  // Updated: Navigate to checkout page instead of placing order directly
   const handleCheckout = () => {
     if (cart.length === 0) {
       alert("Your cart is empty!");
       return;
     }
-
-    const orders = JSON.parse(localStorage.getItem("orders") || "[]");
-    const newOrder = {
-      id: Date.now(),
-      orderNumber: `ORD-${Date.now()}`,
-      items: cart.map((item) => ({
-        ...item,
-        itemTotal: calculateItemTotal(item),
-      })),
-      subtotal: subtotal,
-      shipping: shipping,
-      tax: tax,
-      total: total,
-      totalItems: totalItems,
-      orderDate: new Date().toISOString(),
-      status: "Confirmed",
-    };
-    orders.push(newOrder);
-    localStorage.setItem("orders", JSON.stringify(orders));
-
-    localStorage.removeItem("cart");
-
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new Event("cartUpdated"));
-    }
-
-    setOrderPlaced(true);
-    setShowNotification(true);
-
-    setTimeout(() => {
-      setShowNotification(false);
-      setTimeout(() => {
-        navigate("/orders");
-      }, 2000);
-    }, 3000);
-  };
-
-  const handleOrderSingleProduct = () => {
-    if (!selectedProduct) {
-      alert("Please select a product first!");
-      return;
-    }
-
-    const orders = JSON.parse(localStorage.getItem("orders") || "[]");
-    const productTotal = calculateItemTotal(selectedProduct);
-    const singleShipping = productTotal > 100 ? 0 : 10;
-    const singleTax = productTotal * 0.1;
-    const singleTotal = productTotal + singleShipping + singleTax;
-
-    const newOrder = {
-      id: Date.now(),
-      orderNumber: `ORD-${Date.now()}`,
-      items: [
-        {
-          ...selectedProduct,
-          itemTotal: productTotal,
-        },
-      ],
-      subtotal: productTotal,
-      shipping: singleShipping,
-      tax: singleTax,
-      total: singleTotal,
-      totalItems: selectedProduct.quantity,
-      orderDate: new Date().toISOString(),
-      status: "Confirmed",
-    };
-    orders.push(newOrder);
-    localStorage.setItem("orders", JSON.stringify(orders));
-
-    removeFromCart(selectedProduct.id, selectedProduct.size);
-
-    setShowNotification(true);
-    setSelectedProduct(null);
-
-    setTimeout(() => {
-      setShowNotification(false);
-      setTimeout(() => {
-        navigate("/orders");
-      }, 2000);
-    }, 3000);
-  };
-
-  const handleViewProductDetails = (product) => {
-    setSelectedProduct(product);
-  };
-
-  const handleCloseProductDetails = () => {
-    setSelectedProduct(null);
+    navigate("/checkout");
   };
 
   const calculateItemTotal = (item) => {
@@ -142,7 +60,37 @@ const CartPage = () => {
     return price;
   };
 
-  if (cart.length === 0 && !orderPlaced) {
+  const isInWishlist = (productId, size) => {
+    return wishlist.some((item) => item.id === productId && item.size === size);
+  };
+
+  const handleWishlistToggle = (item) => {
+    if (isInWishlist(item.id, item.size)) {
+      removeFromWishlist(item.id, item.size);
+      setWishlistNotificationMessage(`${item.name} removed from wishlist`);
+      setShowWishlistNotification(true);
+      setTimeout(() => setShowWishlistNotification(false), 2000);
+    } else {
+      addToWishlist({
+        id: item.id,
+        name: item.name,
+        price: item.price,
+        image: item.image,
+        size: item.size,
+        category: item.category,
+      });
+      setWishlistNotificationMessage(`${item.name} added to wishlist`);
+      setShowWishlistNotification(true);
+      setTimeout(() => setShowWishlistNotification(false), 2000);
+    }
+  };
+
+  const [showWishlistNotification, setShowWishlistNotification] =
+    useState(false);
+  const [wishlistNotificationMessage, setWishlistNotificationMessage] =
+    useState("");
+
+  if (cart.length === 0) {
     return (
       <div className="empty-cart">
         <div className="container">
@@ -187,7 +135,7 @@ const CartPage = () => {
           }
 
           svg {
-            color: #ff6b35;
+            color: #e6d160;
             font-size: 60px;
             margin-bottom: 0;
           }
@@ -212,7 +160,7 @@ const CartPage = () => {
 
           .shop-now-btn {
             display: inline-block;
-            background: linear-gradient(135deg, #ff6b35 0%, #ff8c5a 100%);
+            background: linear-gradient(135deg, #e6d160 0%, #e6d160 100%);
             color: #ffffff;
             padding: 16px 42px;
             font-family: "DM Sans", sans-serif;
@@ -235,210 +183,14 @@ const CartPage = () => {
     );
   }
 
-  if (orderPlaced && cart.length === 0) {
-    return (
-      <div className="order-success">
-        <div className="container">
-          <div className="success-icon">
-            <FaCheckCircle />
-          </div>
-          <h2>Order Placed Successfully!</h2>
-          <p>Thank you for your purchase. Your order has been confirmed.</p>
-          <div className="order-details-summary">
-            <h3>Order Summary</h3>
-            <div className="order-info">
-              <p>Order ID: #{Date.now()}</p>
-              <p>Total Items: {totalItems}</p>
-              <p>Order Total: ${total.toFixed(2)}</p>
-            </div>
-          </div>
-          <div className="button-group">
-            <Link to="/orders" className="view-orders">
-              View My Orders
-            </Link>
-          </div>
-        </div>
-
-        <style jsx>{`
-          .order-success {
-            background: linear-gradient(135deg, #f0fff4 0%, #ffffff 100%);
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            text-align: center;
-            padding-top: 100px;
-          }
-
-          .container {
-            max-width: 600px;
-            margin: 0 auto;
-            padding: 40px;
-            text-align: center;
-          }
-
-          .success-icon {
-            width: 100px;
-            height: 100px;
-            margin: 0 auto 24px;
-            background: linear-gradient(135deg, #e8f5e9 0%, #c8e6c9 100%);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }
-
-          svg {
-            color: #4caf50;
-            font-size: 60px;
-            margin-bottom: 0;
-          }
-
-          h2 {
-            font-family: "Playfair Display", serif;
-            font-size: 42px;
-            font-weight: 600;
-            color: #2d2d2d;
-            margin-bottom: 16px;
-            text-align: center;
-          }
-
-          p {
-            font-family: "DM Sans", sans-serif;
-            font-size: 18px;
-            color: #6c6c6c;
-            margin-bottom: 32px;
-            text-align: center;
-          }
-
-          .order-details-summary {
-            background: rgba(255, 255, 255, 0.9);
-            backdrop-filter: blur(10px);
-            padding: 28px;
-            border-radius: 20px;
-            margin: 24px 0;
-            text-align: left;
-            border: 1px solid rgba(255, 107, 53, 0.2);
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
-          }
-
-          .order-details-summary h3 {
-            font-family: "Playfair Display", serif;
-            font-size: 24px;
-            color: #ff6b35;
-            margin-bottom: 16px;
-            text-align: left;
-          }
-
-          .order-info p {
-            margin-bottom: 12px;
-            font-size: 16px;
-            color: #6c6c6c;
-            text-align: left;
-          }
-
-          .button-group {
-            display: flex;
-            gap: 16px;
-            justify-content: center;
-          }
-
-          .view-orders {
-            display: inline-block;
-            padding: 16px 28px;
-            font-family: "DM Sans", sans-serif;
-            font-size: 14px;
-            font-weight: 600;
-            letter-spacing: 2px;
-            text-transform: uppercase;
-            text-decoration: none;
-            border-radius: 40px;
-            transition: all 0.3s;
-            background: linear-gradient(135deg, #ff6b35 0%, #ff8c5a 100%);
-            color: #ffffff;
-            box-shadow: 0 4px 15px rgba(255, 107, 53, 0.3);
-          }
-
-          .view-orders:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 25px rgba(255, 107, 53, 0.4);
-          }
-        `}</style>
-      </div>
-    );
-  }
-
   return (
     <div className="cart-page">
       <div className="container">
-        {showNotification && (
-          <div className="success-notification">
-            <FaCheckCircle className="notification-icon" />
+        {showWishlistNotification && (
+          <div className="wishlist-notification">
+            <FaHeart className="notification-icon" />
             <div className="notification-content">
-              <h4>Order Placed Successfully!</h4>
-              <p>
-                Your order has been confirmed. Thank you for shopping with us!
-              </p>
-            </div>
-          </div>
-        )}
-
-        {selectedProduct && (
-          <div className="modal-overlay" onClick={handleCloseProductDetails}>
-            <div
-              className="product-details-modal"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <button
-                className="close-modal"
-                onClick={handleCloseProductDetails}
-              >
-                ×
-              </button>
-              <div className="modal-content">
-                <div className="modal-image">
-                  <img src={selectedProduct.image} alt={selectedProduct.name} />
-                </div>
-                <div className="modal-info">
-                  <h2>{selectedProduct.name}</h2>
-                  <p className="modal-category">{selectedProduct.category}</p>
-                  {selectedProduct.size && (
-                    <p className="modal-size">Size: {selectedProduct.size}</p>
-                  )}
-                  <div className="modal-price">
-                    <span className="current-price">
-                      {formatPrice(selectedProduct.price)}
-                    </span>
-                    {selectedProduct.originalPrice && (
-                      <span className="original-price">
-                        {formatPrice(selectedProduct.originalPrice)}
-                      </span>
-                    )}
-                  </div>
-                  <div className="modal-quantity">
-                    <span>Quantity: {selectedProduct.quantity}</span>
-                  </div>
-                  <div className="modal-total">
-                    <strong>Item Total: </strong>
-                    <span>
-                      ${calculateItemTotal(selectedProduct).toFixed(2)}
-                    </span>
-                  </div>
-
-                  <button
-                    className="order-now-btn"
-                    onClick={handleOrderSingleProduct}
-                  >
-                    <FaShoppingCart /> Order Now • $
-                    {calculateItemTotal(selectedProduct).toFixed(2)}
-                  </button>
-
-                  <p className="order-note">
-                    This will place an order only for this product and remove it
-                    from your cart.
-                  </p>
-                </div>
-              </div>
+              <p>{wishlistNotificationMessage}</p>
             </div>
           </div>
         )}
@@ -448,7 +200,6 @@ const CartPage = () => {
             <FaArrowLeft /> Continue Shopping
           </Link>
           <h1>Shopping Cart</h1>
-         
         </div>
 
         <div className="cart-layout">
@@ -495,10 +246,18 @@ const CartPage = () => {
                     </button>
 
                     <button
-                      className="quick-order-btn"
-                      onClick={() => handleViewProductDetails(item)}
+                      className={`wishlist-btn ${isInWishlist(item.id, item.size) ? "in-wishlist" : ""}`}
+                      onClick={() => handleWishlistToggle(item)}
                     >
-                      <FaEye /> Quick Order
+                      {isInWishlist(item.id, item.size) ? (
+                        <>
+                          <FaHeart /> Saved
+                        </>
+                      ) : (
+                        <>
+                          <FaRegHeart /> Save
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
@@ -587,196 +346,19 @@ const CartPage = () => {
           padding: 0 24px;
         }
 
-        /* Modal Styles */
-        .modal-overlay {
-          position: fixed;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background: rgba(0, 0, 0, 0.8);
-          backdrop-filter: blur(5px);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          z-index: 2000;
-        }
-
-        .product-details-modal {
-          background: #ffffff;
-          border-radius: 30px;
-          max-width: 900px;
-          width: 90%;
-          max-height: 85vh;
-          overflow-y: auto;
-          position: relative;
-          animation: modalSlideIn 0.3s ease-out;
-          box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-        }
-
-        @keyframes modalSlideIn {
-          from {
-            transform: translateY(-50px);
-            opacity: 0;
-          }
-          to {
-            transform: translateY(0);
-            opacity: 1;
-          }
-        }
-
-        .close-modal {
-          position: absolute;
-          top: 20px;
-          right: 25px;
-          background: rgba(255, 107, 53, 0.1);
-          border: none;
-          font-size: 28px;
-          cursor: pointer;
-          color: #161515;
-          z-index: 1;
-          width: 40px;
-          height: 40px;
-          border-radius: 50%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transition: all 0.3s;
-        }
-
-        .close-modal:hover {
-          background: #ff6b35;
-          color: white;
-          transform: rotate(90deg);
-        }
-
-        .modal-content {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 32px;
-          padding: 32px;
-        }
-
-        .modal-image img {
-          width: 100%;
-          height: auto;
-          border-radius: 20px;
-          object-fit: cover;
-          box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-        }
-
-        .modal-info {
-          text-align: left;
-        }
-
-        .modal-info h2 {
-          font-family: "Playfair Display", serif;
-          font-size: 28px;
-          font-weight: 600;
-          color: #2d2d2d;
-          margin-bottom: 12px;
-          text-align: left;
-        }
-
-        .modal-category {
-          font-family: "DM Sans", sans-serif;
-          font-size: 13px;
-          color: #ff6b35;
-          text-transform: uppercase;
-          letter-spacing: 2px;
-          margin-bottom: 12px;
-          text-align: left;
-          font-weight: 600;
-        }
-
-        .modal-size {
-          font-family: "DM Sans", sans-serif;
-          font-size: 14px;
-          color: #6c6c6c;
-          margin-bottom: 12px;
-          text-align: left;
-        }
-
-        .modal-price {
-          margin-bottom: 20px;
-          text-align: left;
-        }
-
-        .current-price {
-          font-size: 28px;
-          font-weight: 700;
-          color: #ff6b35;
-        }
-
-        .original-price {
-          font-size: 18px;
-          color: #999999;
-          text-decoration: line-through;
-          margin-left: 12px;
-        }
-
-        .modal-quantity {
-          margin-bottom: 20px;
-          font-size: 16px;
-          color: #6c6c6c;
-          text-align: left;
-        }
-
-        .modal-total {
-          font-size: 20px;
-          color: #2d2d2d;
-          padding-top: 20px;
-          border-top: 1px solid #f0f0f0;
-          margin-bottom: 24px;
-          text-align: left;
-        }
-
-        .order-now-btn {
-          width: 100%;
-          background: linear-gradient(135deg, #ff6b35 0%, #ff8c5a 100%);
-          border: none;
-          padding: 14px;
-          font-family: "DM Sans", sans-serif;
-          font-size: 14px;
-          font-weight: 600;
-          text-transform: uppercase;
-          cursor: pointer;
-          border-radius: 40px;
-          margin: 16px 0;
-          transition: all 0.3s;
-          color: #ffffff;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 12px;
-          box-shadow: 0 4px 15px rgba(255, 107, 53, 0.3);
-        }
-
-        .order-now-btn:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 8px 25px rgba(255, 107, 53, 0.4);
-        }
-
-        .order-note {
-          font-size: 12px;
-          color: #999999;
-          text-align: center;
-          margin-top: 12px;
-        }
-
-        /* Success Notification */
-        .success-notification {
+        /* Wishlist Notification */
+        .wishlist-notification {
           position: fixed;
           top: 100px;
           right: 20px;
-          background: linear-gradient(135deg, #4caf50 0%, #45a049 100%);
+          background: linear-gradient(135deg, #ff6b6b 0%, #ff5252 100%);
           color: #ffffff;
           padding: 16px 24px;
           border-radius: 16px;
           display: flex;
           align-items: center;
           gap: 12px;
-          box-shadow: 0 10px 25px -5px rgba(76, 175, 80, 0.3);
+          box-shadow: 0 10px 25px -5px rgba(255, 82, 82, 0.3);
           z-index: 1000;
           animation: slideIn 0.3s ease-out;
         }
@@ -817,7 +399,7 @@ const CartPage = () => {
           display: inline-flex;
           align-items: center;
           gap: 8px;
-          color: #ff6b35;
+          color: #e6d160;
           text-decoration: none;
           font-family: "DM Sans", sans-serif;
           font-size: 14px;
@@ -828,7 +410,7 @@ const CartPage = () => {
         }
 
         .back-link:hover {
-          color: #ff8c5a;
+          color: #e6d160;
           transform: translateX(-5px);
         }
 
@@ -913,7 +495,7 @@ const CartPage = () => {
         .item-size {
           font-family: "DM Sans", sans-serif;
           font-size: 13px;
-          color: #ff6b35;
+          color: #e6d160;
           margin-bottom: 8px;
           text-align: left;
           font-weight: 500;
@@ -922,7 +504,7 @@ const CartPage = () => {
         .item-price {
           font-family: "DM Sans", sans-serif;
           font-size: 18px;
-          color: #ff6b35;
+          color: #e6d160;
           font-weight: 700;
           margin-bottom: 16px;
           text-align: left;
@@ -930,63 +512,66 @@ const CartPage = () => {
 
         .item-actions {
           display: flex;
-          gap: 16px;
+          gap: 12px;
           align-items: center;
-          flex-wrap: wrap;
+          flex-wrap: nowrap;
         }
 
         .item-quantity {
           display: flex;
           align-items: center;
-          gap: 12px;
+          gap: 8px;
           background: #ffffff;
           border: 1px solid rgba(255, 107, 53, 0.2);
           border-radius: 40px;
-          padding: 4px 12px;
+          padding: 4px 8px;
+          flex-shrink: 0;
         }
 
         .item-quantity button {
           background: none;
           border: none;
-          width: 28px;
-          height: 28px;
+          width: 24px;
+          height: 24px;
           display: flex;
           align-items: center;
           justify-content: center;
           cursor: pointer;
-          color: #ff6b35;
+          color: #e6d160;
           border-radius: 50%;
           transition: all 0.3s;
         }
 
         .item-quantity button:hover {
           background: rgba(255, 107, 53, 0.1);
-          color: #ff8c5a;
+          color: #e6d160;
         }
 
         .item-quantity span {
           font-family: "DM Sans", sans-serif;
           color: #2d2d2d;
-          min-width: 30px;
+          min-width: 24px;
           text-align: center;
           font-size: 14px;
           font-weight: 500;
         }
 
         .remove-btn,
-        .quick-order-btn {
+        .wishlist-btn {
           background: none;
           border: none;
           cursor: pointer;
           transition: all 0.3s;
-          font-size: 13px;
+          font-size: 12px;
           display: flex;
           align-items: center;
-          gap: 6px;
-          padding: 8px 16px;
+          gap: 5px;
+          padding: 6px 12px;
           border-radius: 40px;
           font-family: "DM Sans", sans-serif;
           font-weight: 500;
+          white-space: nowrap;
+          flex-shrink: 0;
         }
 
         .remove-btn {
@@ -996,21 +581,32 @@ const CartPage = () => {
         }
 
         .remove-btn:hover {
-          color: #ff4444;
-          border-color: #ff4444;
+          color: #e6d160;
+          border-color: #e6d160;
           background: #fff5f5;
         }
 
-        .quick-order-btn {
-          color: #ff6b35;
+        .wishlist-btn {
+          color: #e6d160;
           background: #ffffff;
           border: 1px solid rgba(255, 107, 53, 0.2);
         }
 
-        .quick-order-btn:hover {
-          background: linear-gradient(135deg, #ff6b35 0%, #ff8c5a 100%);
+        .wishlist-btn:hover {
+          background: linear-gradient(135deg, #e6d160 0%, #e6d160 100%);
           color: #ffffff;
           border-color: transparent;
+          transform: translateY(-2px);
+        }
+
+        .wishlist-btn.in-wishlist {
+          background: linear-gradient(135deg, #ff6b6b 0%, #ff5252 100%);
+          color: #ffffff;
+          border-color: transparent;
+        }
+
+        .wishlist-btn.in-wishlist:hover {
+          background: linear-gradient(135deg, #ff5252 0%, #ff3838 100%);
           transform: translateY(-2px);
         }
 
@@ -1032,7 +628,7 @@ const CartPage = () => {
           display: block;
           font-family: "DM Sans", sans-serif;
           font-weight: 700;
-          color: #ff6b35;
+          color: #e6d160;
           font-size: 20px;
           text-align: right;
         }
@@ -1053,7 +649,7 @@ const CartPage = () => {
           font-family: "Playfair Display", serif;
           font-size: 24px;
           font-weight: 600;
-          color: #ff6b35;
+          color: #e6d160;
           margin-bottom: 24px;
           text-align: left;
         }
@@ -1081,7 +677,7 @@ const CartPage = () => {
 
         .item-price-summary {
           font-weight: 500;
-          color: #ff6b35;
+          color: #e6d160;
           text-align: right;
         }
 
@@ -1114,7 +710,7 @@ const CartPage = () => {
 
         .checkout-btn {
           width: 100%;
-          background: linear-gradient(135deg, #ff6b35 0%, #ff8c5a 100%);
+          background: linear-gradient(135deg, #e6d160 0%, #e6d160 100%);
           border: none;
           padding: 16px;
           font-family: "DM Sans", sans-serif;
@@ -1154,7 +750,7 @@ const CartPage = () => {
         }
 
         .benefit svg {
-          color: #ff6b35;
+          color: #e6d160;
           font-size: 14px;
         }
 
@@ -1190,9 +786,16 @@ const CartPage = () => {
           .cart-header h1 {
             font-size: 42px;
           }
+        }
 
-          .modal-content {
-            grid-template-columns: 1fr;
+        @media (max-width: 768px) {
+          .item-actions {
+            flex-wrap: wrap;
+          }
+
+          .remove-btn,
+          .wishlist-btn {
+            white-space: nowrap;
           }
         }
       `}</style>

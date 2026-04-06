@@ -7,7 +7,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [userType, setUserType] = useState(null); // "customer" or "seller"
+  const [userType, setUserType] = useState(null); // "customer", "seller", or "admin"
 
   useEffect(() => {
     const storedUser = localStorage.getItem("nivest_user");
@@ -17,17 +17,25 @@ export function AuthProvider({ children }) {
       const parsed = JSON.parse(storedUser);
       setUser(parsed);
       setIsAuthenticated(true);
-      setUserType(storedUserType || (parsed.isSeller ? "seller" : "customer"));
+      setUserType(storedUserType || getUserTypeFromRole(parsed));
     }
     setLoading(false);
   }, []);
 
+  // Helper function to determine user type from user object
+  const getUserTypeFromRole = (userObj) => {
+    if (userObj.role === "admin" || userObj.isAdmin === true) return "admin";
+    if (userObj.isSeller === true || userObj.role === "seller") return "seller";
+    return "customer";
+  };
+
   const login = (userData) => {
     const userObj = {
       ...userData,
-      isSeller: userData.isSeller === true,
+      isSeller: userData.isSeller === true || userData.role === "seller",
+      isAdmin: userData.isAdmin === true || userData.role === "admin",
     };
-    const userTypeValue = userObj.isSeller ? "seller" : "customer";
+    const userTypeValue = getUserTypeFromRole(userObj);
 
     setUser(userObj);
     setIsAuthenticated(true);
@@ -39,9 +47,10 @@ export function AuthProvider({ children }) {
   const signup = (userData) => {
     const userObj = {
       ...userData,
-      isSeller: userData.isSeller === true,
+      isSeller: userData.isSeller === true || userData.role === "seller",
+      isAdmin: userData.isAdmin === true || userData.role === "admin",
     };
-    const userTypeValue = userObj.isSeller ? "seller" : "customer";
+    const userTypeValue = getUserTypeFromRole(userObj);
 
     setUser(userObj);
     setIsAuthenticated(true);
@@ -58,8 +67,10 @@ export function AuthProvider({ children }) {
     localStorage.removeItem("nivest_user_type");
   };
 
-  const isSeller = user?.isSeller === true;
-  const isCustomer = user?.isSeller === false || (user && !user.isSeller);
+  // Role check helpers
+  const isSeller = user?.isSeller === true || user?.role === "seller";
+  const isAdmin = user?.isAdmin === true || user?.role === "admin";
+  const isCustomer = !isSeller && !isAdmin && user !== null;
 
   // Helper function to check if user has seller access
   const hasSellerAccess = () => {
@@ -71,6 +82,19 @@ export function AuthProvider({ children }) {
     return isAuthenticated && isCustomer;
   };
 
+  // Helper function to check if user has admin access
+  const hasAdminAccess = () => {
+    return isAuthenticated && isAdmin;
+  };
+
+  // Helper function to get user role
+  const getUserRole = () => {
+    if (isAdmin) return "admin";
+    if (isSeller) return "seller";
+    if (isCustomer) return "customer";
+    return null;
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -79,12 +103,15 @@ export function AuthProvider({ children }) {
         loading,
         userType,
         isSeller,
+        isAdmin,
         isCustomer,
         login,
         signup,
         logout,
         hasSellerAccess,
         hasCustomerAccess,
+        hasAdminAccess,
+        getUserRole,
       }}
     >
       {!loading && children}

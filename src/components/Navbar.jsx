@@ -1,4 +1,3 @@
-
 // components/Navbar.jsx
 import React, { useState, useRef, useEffect } from "react";
 import {
@@ -9,6 +8,7 @@ import {
   FaChevronDown,
   FaSignOutAlt,
   FaUserCircle,
+  FaTachometerAlt,
 } from "react-icons/fa";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useStore } from "../context/StoreContext";
@@ -171,34 +171,31 @@ const globalCSS = `
   }
 
   .dropdown-item {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  padding: 12px 2px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  color: #1a1a1a;
-  font-size: 14px;
-  font-family: 'Inter', sans-serif;
-  font-weight: 500;
-  transition: all 0.2s ease;
-  text-align: left;
-  gap: 1px; /* ✅ cleaner spacing */
-}
+    display: flex;
+    align-items: center;
+    width: 100%;
+    padding: 12px 20px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: #1a1a1a;
+    font-size: 14px;
+    font-family: 'Inter', sans-serif;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    text-align: left;
+    gap: 12px;
+  }
 
-.dropdown-item .item-icon {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;   /* ✅ fixed width for alignment */
-  height: 12px;  /* ✅ equal height */
-  font-size: 16px;
-  color: #D4AF37;
-  flex-shrink: 0; /* ✅ prevents shrinking */
-  margin:1px 2px;
-}
-
+  .dropdown-item .item-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 20px;
+    font-size: 16px;
+    color: #D4AF37;
+    flex-shrink: 0;
+  }
 
   .dropdown-item:hover {
     background: rgba(212, 175, 55, 0.08);
@@ -210,11 +207,20 @@ const globalCSS = `
   }
   .dropdown-item.logout .item-icon { 
     color: #dc2626; 
-    
-    
   }
   .dropdown-item.logout:hover { 
     background: rgba(220, 38, 38, 0.08); 
+  }
+
+  .admin-badge {
+    background: linear-gradient(135deg, #D4AF37 0%, #B8860B 100%);
+    color: white;
+    font-size: 10px;
+    font-weight: bold;
+    padding: 2px 8px;
+    border-radius: 12px;
+    margin-left: 8px;
+    letter-spacing: 0.5px;
   }
 
   .search-overlay {
@@ -260,10 +266,17 @@ export default function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { getCartCount, wishlist } = useStore();
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, logout, isAdmin } = useAuth();
   const [searchOpen, setSearchOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const userMenuRef = useRef(null);
+
+  // Debug log to check values
+  useEffect(() => {
+    console.log("Navbar - User:", user);
+    console.log("Navbar - isAdmin:", isAdmin);
+    console.log("Navbar - isAuthenticated:", isAuthenticated);
+  }, [user, isAdmin, isAuthenticated]);
 
   useEffect(() => {
     const closeMenu = (e) => {
@@ -358,8 +371,11 @@ export default function Navbar() {
               >
                 <FaUserCircle size={22} style={{ color: "#D4AF37" }} />
                 <span style={{ ...T.sans, fontSize: 14, fontWeight: 500 }}>
-                  {user?.name?.split(" ")[0] || "User"}
+                  {user?.name?.split(" ")[0] ||
+                    user?.email?.split("@")[0] ||
+                    "User"}
                 </span>
+                {isAdmin && <span className="admin-badge">Admin</span>}
                 <FaChevronDown
                   size={11}
                   style={{
@@ -376,7 +392,17 @@ export default function Navbar() {
                   <div className="user-info">
                     <FaUserCircle size={44} style={{ color: "#D4AF37" }} />
                     <div>
-                      <p className="user-name-full">{user?.name}</p>
+                      <p className="user-name-full">
+                        {user?.name || user?.email}
+                        {isAdmin && (
+                          <span
+                            className="admin-badge"
+                            style={{ marginLeft: "8px" }}
+                          >
+                            Admin
+                          </span>
+                        )}
+                      </p>
                       <p className="user-email">{user?.email}</p>
                     </div>
                   </div>
@@ -394,6 +420,22 @@ export default function Navbar() {
                     </span>
                     <span>My Profile</span>
                   </button>
+
+                  {/* Admin Dashboard - Show for admin users */}
+                  {isAdmin && (
+                    <button
+                      className="dropdown-item"
+                      onClick={() => {
+                        navigate("/admin");
+                        setShowUserMenu(false);
+                      }}
+                    >
+                      <span className="item-icon">
+                        <FaTachometerAlt />
+                      </span>
+                      <span>Admin Dashboard</span>
+                    </button>
+                  )}
 
                   <div className="dropdown-divider" />
 

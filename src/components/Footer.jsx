@@ -388,7 +388,7 @@ export default function Footer() {
               {/* ── Brand ── */}
               <Col xs={12} md={6} lg={3}>
                 <div className="ft-brand-logo">
-                  My<span>Shop</span>
+                  <span>Shop</span>
                 </div>
                 <div className="ft-brand-tag">Fashion & Lifestyle</div>
                 <p className="ft-brand-desc">

@@ -8,6 +8,7 @@ import {
 } from "react-router-dom";
 import { StoreProvider } from "./context/StoreContext";
 import { AuthProvider } from "./context/AuthContext";
+import { ProductProvider } from "./context/ProductContext";
 
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
@@ -21,6 +22,8 @@ import ShopPage from "./components/ShopPage";
 import CompanyPage from "./components/CompanyPage";
 import BlogPage from "./components/BlogPage";
 import CartPage from "./components/CartPage";
+import CheckoutPage from "./components/CheckoutPage";
+import OrderConfirmationPage from "./components/OrderConfirmationPage";
 import WishlistPage from "./components/WishlistPage";
 import SearchPage from "./components/SearchPage";
 import ContactPage from "./components/ContactPage";
@@ -29,11 +32,16 @@ import Login from "./components/Auth/Login";
 import Signup from "./components/Auth/Signup";
 import ProtectedRoute from "./components/Auth/ProtectedRoute";
 import SellerDashboard from "./components/SellerDashboard";
+import AdminDashboard from "./components/Admin/AdminDashboard";
 
+// Home page with navbar only inside hero section
 function HomePage() {
   return (
     <>
-      <HeroSection image="https://images.unsplash.com/photo-1520975661595-6453be3f7070?q=80&w=1974&auto=format&fit=crop" />
+      <div className="hero-navbar-wrapper">
+        <Navbar />
+        <HeroSection image="https://images.unsplash.com/photo-1520975661595-6453be3f7070?q=80&w=1974&auto=format&fit=crop" />
+      </div>
       <ProductListing />
       <About />
       <New_arrivals />
@@ -44,59 +52,218 @@ function HomePage() {
   );
 }
 
-// Create a wrapper component to handle conditional Navbar rendering
+// Wrapper component for routes
 function AppContent() {
   const location = useLocation();
-  // Hide navbar on these routes
-  const hideNavbarRoutes = ["/seller-dashboard", "/login", "/signup"];
-  const shouldHideNavbar = hideNavbarRoutes.includes(location.pathname);
+
+  // Check if current route is admin route
+  const isAdminRoute = location.pathname.startsWith("/admin");
 
   return (
     <div className="App">
-      {!shouldHideNavbar && <Navbar />}
       <Routes>
+        {/* Public Routes */}
         <Route path="/" element={<HomePage />} />
-        <Route path="/shop" element={<ShopPage />} />
-        <Route path="/company" element={<CompanyPage />} />
-        <Route path="/blog" element={<BlogPage />} />
-        <Route path="/cart" element={<CartPage />} />
-        <Route path="/wishlist" element={<WishlistPage />} />
-        <Route path="/search" element={<SearchPage />} />
-        <Route path="/contact" element={<ContactPage />} />
+        <Route
+          path="/shop"
+          element={
+            <>
+              <Navbar />
+              <ShopPage />
+            </>
+          }
+        />
+        <Route
+          path="/company"
+          element={
+            <>
+              <Navbar />
+              <CompanyPage />
+            </>
+          }
+        />
+        <Route
+          path="/blog"
+          element={
+            <>
+              <Navbar />
+              <BlogPage />
+            </>
+          }
+        />
+        <Route
+          path="/cart"
+          element={
+            <>
+              <Navbar />
+              <CartPage />
+            </>
+          }
+        />
+        <Route
+          path="/checkout"
+          element={
+            <>
+              <Navbar />
+              <CheckoutPage />
+            </>
+          }
+        />
+        <Route
+          path="/order-confirmation"
+          element={
+            <>
+              <Navbar />
+              <OrderConfirmationPage />
+            </>
+          }
+        />
+        <Route
+          path="/wishlist"
+          element={
+            <>
+              <Navbar />
+              <WishlistPage />
+            </>
+          }
+        />
+        <Route
+          path="/search"
+          element={
+            <>
+              <Navbar />
+              <SearchPage />
+            </>
+          }
+        />
+        <Route
+          path="/contact"
+          element={
+            <>
+              <Navbar />
+              <ContactPage />
+            </>
+          }
+        />
+
+        {/* Auth Routes - No Navbar */}
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
 
-        {/* Protected Routes - Require Authentication */}
+        {/* Protected Profile Route */}
         <Route
           path="/profile"
           element={
             <ProtectedRoute>
-              <ProfilePage />
+              <>
+                <Navbar />
+                <ProfilePage />
+              </>
             </ProtectedRoute>
           }
         />
 
-        {/* Seller Dashboard - Protected Route */}
+        {/* Seller Dashboard Protected Route - No Navbar */}
         <Route
           path="/seller-dashboard"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requireSeller={true}>
               <SellerDashboard />
             </ProtectedRoute>
           }
         />
+
+        {/* Admin Dashboard Routes - No Navbar, Full page admin dashboard */}
+        <Route
+          path="/admin"
+          element={
+            <ProtectedRoute requireAdmin={true}>
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/products"
+          element={
+            <ProtectedRoute requireAdmin={true}>
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/orders"
+          element={
+            <ProtectedRoute requireAdmin={true}>
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/shipping"
+          element={
+            <ProtectedRoute requireAdmin={true}>
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/returns"
+          element={
+            <ProtectedRoute requireAdmin={true}>
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/payments"
+          element={
+            <ProtectedRoute requireAdmin={true}>
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/users"
+          element={
+            <ProtectedRoute requireAdmin={true}>
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/analytics"
+          element={
+            <ProtectedRoute requireAdmin={true}>
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/profile"
+          element={
+            <ProtectedRoute requireAdmin={true}>
+              <AdminDashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Catch all - redirect to home */}
+        <Route path="*" element={<HomePage />} />
       </Routes>
     </div>
   );
 }
 
+// Main App
 function App() {
   return (
     <AuthProvider>
       <StoreProvider>
-        <Router>
-          <AppContent />
-        </Router>
+        <ProductProvider>
+          <Router>
+            <AppContent />
+          </Router>
+        </ProductProvider>
       </StoreProvider>
     </AuthProvider>
   );

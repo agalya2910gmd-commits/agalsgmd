@@ -285,7 +285,7 @@ const CSS = `
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Outfit:wght@300;400;500;600&display=swap');
 
 .na-section {
-  background: linear-gradient(135deg, #e6e6ec, #f0f0f5);
+  background: linear-gradient(135deg,  #f0f0f5);
   padding: 90px 0 100px;
   position: relative;
   overflow: hidden;

@@ -1,4 +1,4 @@
-// src/components/Admin/AdminDashboard.jsx
+// src/components/Admin/Dashboard.jsx
 import React, { useState, useEffect } from "react";
 import Sidebar from "./Sidebar";
 import ProductsManagement from "./ProductsManagement";
@@ -11,7 +11,7 @@ import PaymentsManagement from "./PaymentsManagement";
 import AdminProfile from "./AdminProfile";
 import "./AdminDashboard.css";
 
-const AdminDashboard = () => {
+const Dashboard = () => {
   const [activeTab, setActiveTab] = useState("products");
   const [stats, setStats] = useState({
     totalProducts: 0,
@@ -66,8 +66,6 @@ const AdminDashboard = () => {
       status: "pending",
       date: "2024-01-15",
       items: 3,
-      shipping: "pending",
-      payment: "pending",
     },
     {
       id: 1002,
@@ -76,8 +74,6 @@ const AdminDashboard = () => {
       status: "shipped",
       date: "2024-01-14",
       items: 2,
-      shipping: "shipped",
-      payment: "completed",
     },
     {
       id: 1003,
@@ -86,8 +82,6 @@ const AdminDashboard = () => {
       status: "delivered",
       date: "2024-01-13",
       items: 5,
-      shipping: "delivered",
-      payment: "completed",
     },
     {
       id: 1004,
@@ -96,15 +90,13 @@ const AdminDashboard = () => {
       status: "pending",
       date: "2024-01-16",
       items: 1,
-      shipping: "pending",
-      payment: "pending",
     },
   ]);
 
   const [users, setUsers] = useState([
     {
       id: 1,
-      name: "John ",
+      name: "John Doe",
       email: "john@example.com",
       role: "customer",
       status: "active",
@@ -141,7 +133,7 @@ const AdminDashboard = () => {
       id: "SH001",
       orderId: 1001,
       customer: "John Doe",
-      address: "123 Main St, NY",
+      address: "123 Main St, New York, NY 10001",
       status: "pending",
       date: "2024-01-15",
       tracking: "",
@@ -150,19 +142,19 @@ const AdminDashboard = () => {
       id: "SH002",
       orderId: 1002,
       customer: "Jane Smith",
-      address: "456 Oak Ave, CA",
+      address: "456 Oak Ave, Los Angeles, CA 90001",
       status: "in-transit",
       date: "2024-01-14",
-      tracking: "TRK123456",
+      tracking: "TRK123456789",
     },
     {
       id: "SH003",
       orderId: 1003,
       customer: "Bob Wilson",
-      address: "789 Pine Rd, TX",
+      address: "789 Pine Rd, Houston, TX 77001",
       status: "delivered",
       date: "2024-01-13",
-      tracking: "TRK789012",
+      tracking: "TRK987654321",
     },
   ]);
 
@@ -172,7 +164,7 @@ const AdminDashboard = () => {
       orderId: 1003,
       customer: "Bob Wilson",
       product: "Wooden Table",
-      reason: "Damaged",
+      reason: "Damaged product received",
       status: "pending",
       date: "2024-01-16",
       refund: 199.99,
@@ -182,7 +174,7 @@ const AdminDashboard = () => {
       orderId: 1001,
       customer: "John Doe",
       product: "Modern Chair",
-      reason: "Wrong size",
+      reason: "Wrong size delivered",
       status: "approved",
       date: "2024-01-15",
       refund: 99.99,
@@ -247,17 +239,6 @@ const AdminDashboard = () => {
         );
       case "orders":
         return <OrdersManagement orders={orders} setOrders={setOrders} />;
-      case "users":
-        return <UsersManagement users={users} setUsers={setUsers} />;
-      case "analytics":
-        return (
-          <Analytics
-            stats={stats}
-            orders={orders}
-            products={products}
-            payments={payments}
-          />
-        );
       case "shipping":
         return (
           <ShippingManagement
@@ -280,6 +261,17 @@ const AdminDashboard = () => {
             payments={payments}
             setPayments={setPayments}
             orders={orders}
+          />
+        );
+      case "users":
+        return <UsersManagement users={users} setUsers={setUsers} />;
+      case "analytics":
+        return (
+          <Analytics
+            stats={stats}
+            orders={orders}
+            products={products}
+            payments={payments}
           />
         );
       case "profile":
@@ -356,4 +348,4 @@ const AdminDashboard = () => {
   );
 };
 
-export default AdminDashboard;
+export default Dashboard;

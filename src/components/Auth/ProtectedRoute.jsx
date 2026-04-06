@@ -2,8 +2,12 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 
-const ProtectedRoute = ({ children, requireSeller = false }) => {
-  const { isAuthenticated, user, loading, isSeller } = useAuth();
+const ProtectedRoute = ({
+  children,
+  requireSeller = false,
+  requireAdmin = false,
+}) => {
+  const { isAuthenticated, user, loading, isSeller, isAdmin } = useAuth();
 
   // Show loading state while checking authentication
   if (loading) {
@@ -51,7 +55,13 @@ const ProtectedRoute = ({ children, requireSeller = false }) => {
 
   // Check if seller access is required
   if (requireSeller && !isSeller) {
-    // Redirect to home page with error message (optional)
+    // Redirect to home page for non-seller users
+    return <Navigate to="/" replace />;
+  }
+
+  // Check if admin access is required
+  if (requireAdmin && !isAdmin) {
+    // Redirect to home page for non-admin users
     return <Navigate to="/" replace />;
   }
 

@@ -190,6 +190,7 @@ const WishlistPage = () => {
           position: relative;
           height: 160px;
           overflow: hidden;
+          width:185px;
         }
 
         .product-image img {

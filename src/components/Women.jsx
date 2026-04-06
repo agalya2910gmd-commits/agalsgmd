@@ -882,7 +882,7 @@ export default function Women() {
 
   const DetailPage = ({ p }) => {
     const isWished = wishlist.includes(p.id);
-    const tagStyle = tagStyles[p.tag] || { bg: "#1A1A2E", color: "#fff" };
+    const tagStyle = tagStyles[p.tag] || { bg: "#1A1A2E", color: "#ffffff" };
     const similar = getSimilar(p);
     const bars = ratingBars(p);
 

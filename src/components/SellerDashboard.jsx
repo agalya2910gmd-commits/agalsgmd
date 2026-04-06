@@ -34,6 +34,7 @@ import {
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
+import { useProducts } from "../context/ProductContext";
 
 // ─── STYLES ───────────────────────────────────────────────────────────────────
 const dashboardCSS = `
@@ -841,10 +842,26 @@ const ProductModal = ({
                 "Footwear",
                 "Accessories",
                 "Outerwear",
+                "Tops",
+                "Bottoms",
+                "Ethnic",
+                "Women",
+                "Men"
               ].map((c) => (
                 <option key={c}>{c}</option>
               ))}
             </select>
+          </div>
+          <div>
+            <label className="sd-lbl">Subcategory</label>
+            <input
+              className="sd-inp"
+              placeholder="e.g. Shirts, Pants, Saree"
+              value={productForm.subcategory || ""}
+              onChange={(e) =>
+                setProductForm((prev) => ({ ...prev, subcategory: e.target.value }))
+              }
+            />
           </div>
           <div>
             <label className="sd-lbl">Status</label>
@@ -861,7 +878,7 @@ const ProductModal = ({
             </select>
           </div>
           <div>
-            <label className="sd-lbl">Selling Price ($) *</label>
+            <label className="sd-lbl">Selling Price (₹) *</label>
             <input
               type="number"
               className="sd-inp"
@@ -872,7 +889,7 @@ const ProductModal = ({
               }
             />
           </div>
-          <div style={{ gridColumn: "1/-1" }}>
+          <div>
             <label className="sd-lbl">Stock Quantity *</label>
             <input
               type="number"
@@ -881,6 +898,29 @@ const ProductModal = ({
               value={productForm.stock}
               onChange={(e) =>
                 setProductForm((prev) => ({ ...prev, stock: e.target.value }))
+              }
+            />
+          </div>
+          <div style={{ gridColumn: "1/-1" }}>
+            <label className="sd-lbl">Image URL</label>
+            <input
+              className="sd-inp"
+              placeholder="https://images.unsplash.com/photo-..."
+              value={productForm.image || ""}
+              onChange={(e) =>
+                setProductForm((prev) => ({ ...prev, image: e.target.value }))
+              }
+            />
+          </div>
+          <div style={{ gridColumn: "1/-1" }}>
+            <label className="sd-lbl">Description</label>
+            <textarea
+              className="sd-inp"
+              placeholder="Enter product description"
+              rows={3}
+              value={productForm.description || ""}
+              onChange={(e) =>
+                setProductForm((prev) => ({ ...prev, description: e.target.value }))
               }
             />
           </div>
@@ -950,6 +990,7 @@ const SellerDashboard = () => {
   const navigate = useNavigate();
   const { user, isAuthenticated, logout } = useAuth();
   const { getCartCount, wishlist } = useStore();
+  const { addProduct: contextAddProduct } = useProducts();
 
   const [activeTab, setActiveTab] = useState("overview");
   const [products, setProducts] = useState(mockProducts);
@@ -1127,7 +1168,9 @@ const SellerDashboard = () => {
       notify("Please fill all required fields", "error");
       return;
     }
+
     if (editingProduct) {
+      // ── UPDATE existing product in dashboard list ──
       setProducts(
         products.map((p) =>
           p.id === editingProduct.id
@@ -1135,31 +1178,58 @@ const SellerDashboard = () => {
                 ...p,
                 name: productForm.name,
                 category: productForm.category,
+                subcategory: productForm.subcategory,
                 price: parseFloat(productForm.price),
                 stock: parseInt(productForm.stock),
                 status: productForm.status,
+                image: productForm.image,
+                description: productForm.description,
               }
             : p,
         ),
       );
       notify("Product updated successfully!");
     } else {
-      const newId = `P00${products.length + 1}`;
+      // ── ADD new product to dashboard list ──
+      const newId = `P${String(products.length + 1).padStart(3, "0")}`;
       setProducts([
         ...products,
         {
           id: newId,
           name: productForm.name,
           category: productForm.category,
+          subcategory: productForm.subcategory,
           price: parseFloat(productForm.price),
           stock: parseInt(productForm.stock),
           status: productForm.status,
           sales: 0,
-          
+          image: productForm.image,
+          description: productForm.description,
         },
       ]);
+
+      // ── ADD to ProductContext so ShopPage sees it ──
+      contextAddProduct({
+        name: productForm.name,
+        category: productForm.category, // e.g. "Men", "Women", "Accessories"
+        subCategory: productForm.subcategory || productForm.category,
+        price: parseFloat(productForm.price),
+        stock: parseInt(productForm.stock),
+        description: productForm.description || "",
+        image:
+          productForm.image ||
+          "https://images.unsplash.com/photo-1542272604-787c3835535d?w=700&q=90&auto=format&fit=crop",
+        images: [
+          productForm.image ||
+            "https://images.unsplash.com/photo-1542272604-787c3835535d?w=700&q=90&auto=format&fit=crop",
+        ],
+        colors: ["#1C1C1C", "#FFFFFF"],
+        tag: "NEW IN",
+      });
+
       notify("Product added successfully!");
     }
+
     setShowProductModal(false);
   };
 

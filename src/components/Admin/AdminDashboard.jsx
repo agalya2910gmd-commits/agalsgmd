@@ -1,6 +1,8 @@
 // src/components/Admin/AdminDashboard.jsx
 import React, { useState, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import Sidebar from "./Sidebar";
+import DashboardHome from "./DashboardHome";
 import ProductsManagement from "./ProductsManagement";
 import OrdersManagement from "./OrdersManagement";
 import UsersManagement from "./User";
@@ -9,10 +11,15 @@ import ShippingManagement from "./ShippingManagement";
 import ReturnsManagement from "./ReturnsManagement";
 import PaymentsManagement from "./PaymentsManagement";
 import AdminProfile from "./AdminProfile";
+import { useAuth } from "../../context/AuthContext";
 import "./AdminDashboard.css";
 
 const AdminDashboard = () => {
-  const [activeTab, setActiveTab] = useState("products");
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { logout } = useAuth();
+  const [activeTab, setActiveTab] = useState("dashboard");
+  const [isLoading, setIsLoading] = useState(false);
   const [stats, setStats] = useState({
     totalProducts: 0,
     totalOrders: 0,
@@ -23,6 +30,7 @@ const AdminDashboard = () => {
     totalPayments: 0,
   });
 
+  // Initialize state variables
   const [products, setProducts] = useState([
     {
       id: 1,
@@ -66,8 +74,6 @@ const AdminDashboard = () => {
       status: "pending",
       date: "2024-01-15",
       items: 3,
-      shipping: "pending",
-      payment: "pending",
     },
     {
       id: 1002,
@@ -76,8 +82,6 @@ const AdminDashboard = () => {
       status: "shipped",
       date: "2024-01-14",
       items: 2,
-      shipping: "shipped",
-      payment: "completed",
     },
     {
       id: 1003,
@@ -86,8 +90,6 @@ const AdminDashboard = () => {
       status: "delivered",
       date: "2024-01-13",
       items: 5,
-      shipping: "delivered",
-      payment: "completed",
     },
     {
       id: 1004,
@@ -96,15 +98,13 @@ const AdminDashboard = () => {
       status: "pending",
       date: "2024-01-16",
       items: 1,
-      shipping: "pending",
-      payment: "pending",
     },
   ]);
 
   const [users, setUsers] = useState([
     {
       id: 1,
-      name: "John ",
+      name: "John Doe",
       email: "john@example.com",
       role: "customer",
       status: "active",
@@ -223,6 +223,20 @@ const AdminDashboard = () => {
     calculateStats();
   }, [products, orders, users, shippingOrders, returns, payments]);
 
+  useEffect(() => {
+    const path = location.pathname;
+    if (path === "/admin" || path === "/admin/") setActiveTab("dashboard");
+    else if (path.includes("/products")) setActiveTab("products");
+    else if (path.includes("/orders")) setActiveTab("orders");
+    else if (path.includes("/shipping")) setActiveTab("shipping");
+    else if (path.includes("/returns")) setActiveTab("returns");
+    else if (path.includes("/payments")) setActiveTab("payments");
+    else if (path.includes("/users")) setActiveTab("users");
+    else if (path.includes("/analytics")) setActiveTab("analytics");
+    else if (path.includes("/profile")) setActiveTab("profile");
+    else setActiveTab("dashboard");
+  }, [location.pathname]);
+
   const calculateStats = () => {
     const totalRevenue = payments
       .filter((p) => p.status === "completed")
@@ -240,24 +254,31 @@ const AdminDashboard = () => {
   };
 
   const renderContent = () => {
+    if (isLoading) {
+      return (
+        <div className="loading-container">
+          <div className="loading-spinner"></div>
+          <p>Loading dashboard...</p>
+        </div>
+      );
+    }
+
     switch (activeTab) {
-      case "products":
+      case "dashboard":
         return (
-          <ProductsManagement products={products} setProducts={setProducts} />
-        );
-      case "orders":
-        return <OrdersManagement orders={orders} setOrders={setOrders} />;
-      case "users":
-        return <UsersManagement users={users} setUsers={setUsers} />;
-      case "analytics":
-        return (
-          <Analytics
+          <DashboardHome
             stats={stats}
             orders={orders}
             products={products}
             payments={payments}
           />
         );
+      case "products":
+        return (
+          <ProductsManagement products={products} setProducts={setProducts} />
+        );
+      case "orders":
+        return <OrdersManagement orders={orders} setOrders={setOrders} />;
       case "shipping":
         return (
           <ShippingManagement
@@ -282,19 +303,47 @@ const AdminDashboard = () => {
             orders={orders}
           />
         );
+      case "users":
+        return <UsersManagement users={users} setUsers={setUsers} />;
+      case "analytics":
+        return (
+          <Analytics
+            stats={stats}
+            orders={orders}
+            products={products}
+            payments={payments}
+          />
+        );
       case "profile":
         return <AdminProfile />;
       default:
         return (
-          <ProductsManagement products={products} setProducts={setProducts} />
+          <DashboardHome
+            stats={stats}
+            orders={orders}
+            products={products}
+            payments={payments}
+          />
         );
     }
   };
 
   const handleLogout = () => {
-    localStorage.removeItem("nivest_user");
-    localStorage.removeItem("nivest_user_type");
-    window.location.href = "/login";
+    if (window.confirm("Are you sure you want to logout?")) {
+      logout();
+      localStorage.removeItem("nivest_user");
+      localStorage.removeItem("nivest_user_type");
+      navigate("/login");
+    }
+  };
+
+  const getAdminName = () => {
+    const user = localStorage.getItem("nivest_user");
+    if (user) {
+      const parsedUser = JSON.parse(user);
+      return parsedUser.name || "Admin";
+    }
+    return "Admin";
   };
 
   return (
@@ -302,54 +351,20 @@ const AdminDashboard = () => {
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
       <div className="admin-main">
         <div className="admin-header">
-          <h1>Admin Dashboard</h1>
+          <div className="header-left">
+            <h1>Admin Dashboard</h1>
+            <p className="header-subtitle">Manage your store efficiently</p>
+          </div>
           <div className="admin-user">
-            <span>Welcome, Admin</span>
+            <div className="admin-info-header">
+              <span className="admin-name">Welcome, {getAdminName()}</span>
+              <span className="admin-role">Administrator</span>
+            </div>
             <button className="logout-btn" onClick={handleLogout}>
               Logout
             </button>
           </div>
         </div>
-
-        <div className="stats-grid">
-          <div className="stat-card">
-            <div className="stat-info">
-              <h3>{stats.totalProducts}</h3>
-              <p>Total Products</p>
-            </div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-info">
-              <h3>{stats.totalOrders}</h3>
-              <p>Total Orders</p>
-            </div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-info">
-              <h3>{stats.totalUsers}</h3>
-              <p>Total Users</p>
-            </div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-info">
-              <h3>${stats.totalRevenue.toLocaleString()}</h3>
-              <p>Total Revenue</p>
-            </div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-info">
-              <h3>{stats.totalShipping}</h3>
-              <p>Active Shipping</p>
-            </div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-info">
-              <h3>{stats.totalReturns}</h3>
-              <p>Pending Returns</p>
-            </div>
-          </div>
-        </div>
-
         <div className="admin-content">{renderContent()}</div>
       </div>
     </div>

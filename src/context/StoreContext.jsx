@@ -116,6 +116,16 @@ export const StoreProvider = ({ children }) => {
     }
   };
 
+  // ✅ NEW: Clear entire cart
+  const clearCart = () => {
+    setCart([]);
+    localStorage.removeItem("cart");
+    // Dispatch custom event for other components to listen
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event("cartUpdated"));
+    }
+  };
+
   const getCartTotal = () => {
     return cart.reduce((total, item) => {
       let price = item.price;
@@ -130,7 +140,7 @@ export const StoreProvider = ({ children }) => {
     return cart.reduce((count, item) => count + item.quantity, 0);
   };
 
-  // ✅ FIXED: Store full product objects instead of just IDs
+  // Store full product objects instead of just IDs
   const addToWishlist = (productOrId) => {
     if (typeof productOrId === "object") {
       // Full product object passed
@@ -144,7 +154,7 @@ export const StoreProvider = ({ children }) => {
     }
   };
 
-  // ✅ FIXED: Compare by object's id property
+  // Compare by object's id property
   const removeFromWishlist = (productId) => {
     setWishlist((prev) => prev.filter((item) => item.id !== productId));
   };
@@ -159,7 +169,7 @@ export const StoreProvider = ({ children }) => {
     }
   };
 
-  // ✅ FIXED: Check by object's id property
+  // Check by object's id property
   const isInWishlist = (productId) => {
     return wishlist.some((item) => item.id === productId);
   };
@@ -198,6 +208,7 @@ export const StoreProvider = ({ children }) => {
         addToCart,
         removeFromCart,
         updateQuantity,
+        clearCart, // ✅ EXPORTED HERE
         getCartTotal,
         getCartCount,
         addToWishlist,
