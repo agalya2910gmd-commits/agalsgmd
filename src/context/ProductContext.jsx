@@ -1,5 +1,5 @@
 // context/ProductContext.jsx
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 
 const ProductContext = createContext();
 
@@ -21,141 +21,191 @@ export function normalizeCategoryForShop(category) {
   return category;
 }
 
+/**
+ * Normalizes subcategories to match those used in ShopPage.jsx filters
+ */
 export function normalizeSubCategoryForShop(category, subCategory) {
   const cat = normalizeCategoryForShop(category);
-  const sub = (subCategory || "").toLowerCase().trim();
+  const sub = (subCategory || "").trim().toLowerCase();
+  
+  // High priority user-requested mappings
+  if (sub.includes("shirt")) return "Shirts";
+  if (sub.includes("saree")) return "Saree";
+  if (sub.includes("sandal")) return "Sandals";
+  if (sub.includes("accessor")) return "Accessories";
+  if (sub.includes("men")) return "Men Fashion";
+  if (sub.includes("women")) return "Women Fashion";
 
-  if (cat === "Men") {
-    if (
-      sub.includes("t-shirt") ||
-      sub.includes("tshirt") ||
-      sub.includes("tee") ||
-      sub.includes("polo")
-    )
-      return "T-Shirts";
-    if (sub.includes("print")) return "Printed Shirts";
-    if (sub.includes("shirt")) return "Shirts";
-    if (
-      sub.includes("pant") ||
-      sub.includes("chino") ||
-      sub.includes("jean") ||
-      sub.includes("trouser") ||
-      sub.includes("denim")
-    )
-      return "Pants";
-    return "Shirts";
-  }
-
-  if (cat === "Women") {
-    if (sub.includes("saree") || sub.includes("sari")) return "Saree";
-    if (
-      sub.includes("western") ||
-      sub.includes("dress") ||
-      sub.includes("top") ||
-      sub.includes("skirt")
-    )
-      return "Western Dress";
-    return "Western Dress";
-  }
-
-  if (cat === "Accessories") {
-    if (
-      sub.includes("jewel") ||
-      sub.includes("ring") ||
-      sub.includes("necklace") ||
-      sub.includes("earring") ||
-      sub.includes("bracelet")
-    )
-      return "Jewelry";
-    if (
-      sub.includes("sandal") ||
-      sub.includes("shoe") ||
-      sub.includes("footwear") ||
-      sub.includes("sneaker")
-    )
-      return "Sandals";
-    return "Jewelry";
-  }
-
-  return subCategory || "";
+  // Existing cases
+  if (sub === "t-shirt" || sub === "tshirt") return "T-Shirts";
+  if (sub === "pants" || sub === "pant") return "Pants";
+  
+  // Fallback: Title Case
+  return subCategory ? subCategory.charAt(0).toUpperCase() + subCategory.slice(1).toLowerCase() : "";
 }
 
 // ─── PROVIDER ─────────────────────────────────────────────────────────────────
 export const ProductProvider = ({ children }) => {
-  const [products, setProducts] = useState(() => {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Fetch products from backend with cache-busting
+  const fetchProducts = useCallback(async () => {
     try {
-      const saved = localStorage.getItem("seller_products");
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
+      setLoading(true);
+      const response = await fetch(`http://localhost:5000/api/products?t=${Date.now()}`);
+      
+      const contentType = response.headers.get("content-type");
+      if (response.ok && contentType && contentType.includes("application/json")) {
+        const data = await response.json();
+        const normalized = data.map(p => ({
+          ...p,
+          sellerAdded: true,
+          subCategory: p.subcategory,
+          image: p.image.startsWith("/") ? `http://localhost:5000${p.image}` : p.image,
+          price: typeof p.price === 'string' ? p.price : `₹${parseFloat(p.price).toLocaleString("en-IN")}`,
+        }));
+        setProducts(normalized);
+        return normalized;
+      } else if (!response.ok) {
+        const text = await response.text();
+        console.error("Fetch products failed:", text);
+      }
+    } catch (error) {
+      console.error("Error fetching products:", error);
+    } finally {
+      setLoading(false);
     }
-  });
+  }, []);
 
   useEffect(() => {
+    fetchProducts();
+  }, [fetchProducts]);
+
+  const addProduct = async (productData, sellerId) => {
     try {
-      localStorage.setItem("seller_products", JSON.stringify(products));
-    } catch {}
-  }, [products]);
+      const formData = new FormData();
+      formData.append("name", productData.name);
+      formData.append("price", productData.price);
+      formData.append("description", productData.description || "");
+      formData.append("seller_id", sellerId || productData.seller_id || 1);
+      formData.append("category", productData.category);
+      formData.append("subcategory", normalizeSubCategoryForShop(productData.category, productData.subCategory));
+      formData.append("stock", productData.stock || 0);
 
-  const addProduct = (product) => {
-    const newId = Date.now();
-    const price = parseFloat(product.price) || 0;
-    const originalPrice = Math.round(price / 0.7);
+      // Append new fields
+      const newFields = [
+        "parent_product_id", "category_id", "review_id", "sku", "mrp", "stock_quantity",
+        "weight", "length", "breadth", "height", "brand", "image_url",
+        "variant_name", "variant_value", "is_variant", "is_active"
+      ];
 
-    const category = normalizeCategoryForShop(product.category);
-    const subCategory = normalizeSubCategoryForShop(
-      product.category,
-      product.subCategory || product.subcategory || "",
-    );
+      newFields.forEach(field => {
+        if (productData[field] !== undefined && productData[field] !== null) {
+          formData.append(field, productData[field]);
+        }
+      });
 
-    const newProduct = {
-      id: newId,
-      name: product.name || "Unnamed Product",
-      category,
-      subCategory,
-      price: `₹${price.toLocaleString("en-IN")}`,
-      originalPrice: `₹${originalPrice.toLocaleString("en-IN")}`,
-      discount: `${Math.round((1 - price / originalPrice) * 100)}% OFF`,
-      rating: 0,
-      reviews: 0,
-      image:
-        product.image ||
-        "https://images.unsplash.com/photo-1542272604-787c3835535d?w=700&q=90&auto=format&fit=crop",
-      images: product.images || [
-        product.image ||
-          "https://images.unsplash.com/photo-1542272604-787c3835535d?w=700&q=90&auto=format&fit=crop",
-      ],
-      tag: product.tag || "NEW IN",
-      colors: product.colors || ["#1C1C1C", "#FFFFFF"],
-      colorNames: product.colorNames || ["Black", "White"],
-      sizes: product.sizes || ["S", "M", "L", "XL"],
-      description: product.description || "",
-      material: product.material || "",
-      care: "Machine wash cold.",
-      brand: product.brand || "Nivest",
-      inStock: (parseInt(product.stock) || 0) > 0,
-      stock: parseInt(product.stock) || 0,
-      delivery: "Free delivery in 3-5 days",
-      returns: "30 days easy returns",
-      warranty: "3 months warranty",
-      highlights: [],
-      reviewsList: [],
-      sales: 0,
-      sellerAdded: true,
-    };
+      if (productData.imageFile) {
+        formData.append("image", productData.imageFile);
+      } else if (productData.image) {
+        formData.append("image", productData.image);
+      }
 
-    setProducts((prev) => [...prev, newProduct]);
-    return newProduct;
+      const response = await fetch("http://localhost:5000/api/products", {
+        method: "POST",
+        body: formData,
+      });
+
+      const contentType = response.headers.get("content-type");
+      if (!response.ok) {
+        let errorMessage = `Server error (${response.status})`;
+        if (contentType && contentType.includes("application/json")) {
+          const err = await response.json();
+          errorMessage = err.message || errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
+
+      if (contentType && contentType.includes("application/json")) {
+        const result = await response.json();
+        const newProduct = {
+          ...result.product,
+          sellerAdded: true,
+          image: result.product.image?.startsWith("/") ? `http://localhost:5000${result.product.image}` : result.product.image,
+          price: `₹${parseFloat(result.product.price).toLocaleString("en-IN")}`,
+          subCategory: result.product.subcategory
+        };
+        
+        setProducts((prev) => [newProduct, ...prev]);
+        return newProduct;
+      } else {
+        throw new Error("Unexpected response from server (Not JSON)");
+      }
+    } catch (error) {
+      console.error("Error adding product:", error);
+      throw error;
+    }
   };
 
-  const updateProduct = (id, updatedData) => {
-    setProducts((prev) =>
-      prev.map((p) => (p.id === id ? { ...p, ...updatedData } : p)),
-    );
+  const updateProduct = async (id, updatedData) => {
+    try {
+      const formData = new FormData();
+      Object.keys(updatedData).forEach(key => {
+        if (key === 'imageFile' && updatedData[key]) {
+          formData.append("image", updatedData[key]);
+        } else if (key === 'subCategory') {
+          formData.append("subcategory", normalizeSubCategoryForShop(updatedData.category, updatedData.subCategory));
+        } else if (updatedData[key] !== undefined && key !== 'image') {
+          formData.append(key, updatedData[key]);
+        }
+      });
+      
+      const response = await fetch(`http://localhost:5000/api/products/${id}`, {
+        method: "PUT",
+        body: formData,
+      });
+
+      if (!response.ok) throw new Error("Failed to update product");
+      
+      await fetchProducts(); 
+      return true;
+    } catch (error) {
+      console.error("Update Error:", error);
+      throw error;
+    }
   };
 
-  const deleteProduct = (id) => {
-    setProducts((prev) => prev.filter((p) => p.id !== id));
+  const deleteProduct = async (id) => {
+    try {
+      // Ensure we have a valid ID before making the request
+      if (!id || id === "undefined" || id === "null") {
+        console.error("ProductContext: Cannot delete without a valid ID. Received:", id);
+        throw new Error("Invalid Product ID provided for deletion.");
+      }
+      
+      console.log(`ProductContext: Attempting to delete database product [ID: ${id}]`);
+      
+      const response = await fetch(`http://localhost:5000/api/products/${id}`, {
+        method: "DELETE",
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.error("ProductContext: Delete API failed:", errorData);
+        throw new Error(errorData.message || "Server rejected the deletion request.");
+      }
+      
+      const successData = await response.json().catch(() => ({}));
+      console.log("ProductContext: Delete successful:", successData);
+      
+      // Critical: Re-fetch the latest product list from database to sync all pages
+      await fetchProducts(); 
+      return true;
+    } catch (error) {
+      console.error("ProductContext: Global Delete Error:", error);
+      throw error;
+    }
   };
 
   const getProductById = (id) => products.find((p) => p.id === id);

@@ -198,7 +198,7 @@ const ReturnsManagement = ({ returns, setReturns, orders }) => {
             className="stat-value"
             style={{ fontSize: "20px", fontWeight: "bold", display: "block" }}
           >
-            ${totalRefundAmount.toLocaleString()}
+            {totalRefundAmount.toLocaleString()}
           </span>
         </div>
       </div>
@@ -296,7 +296,7 @@ const ReturnsManagement = ({ returns, setReturns, orders }) => {
                       color: "#10b981",
                     }}
                   >
-                    ${item.refund}
+                    {item.refund}
                   </td>
                   <td style={{ padding: "8px 6px" }}>
                     <span
@@ -455,7 +455,7 @@ const ReturnsManagement = ({ returns, setReturns, orders }) => {
                       color: "#10b981",
                     }}
                   >
-                    ${selectedReturn.refund}
+                    {selectedReturn.refund}
                   </span>
                 </div>
                 <div className="detail-item">

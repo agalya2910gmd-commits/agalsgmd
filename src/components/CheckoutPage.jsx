@@ -1,6 +1,7 @@
 // src/components/CheckoutPage.jsx
 import React, { useState, useEffect } from "react";
 import { useStore } from "../context/StoreContext";
+import { useAuth } from "../context/AuthContext";
 import { Link, useNavigate } from "react-router-dom";
 import emailjs from "@emailjs/browser";
 import {
@@ -13,13 +14,19 @@ import {
   FaPaypal,
   FaApplePay,
   FaGooglePay,
-  FaTrash,
+  FaEdit,
+  FaExchangeAlt,
+  FaTimes,
+  FaSave,
+  FaHome,
+  FaBriefcase,
+  FaMapMarkerAlt,
+  FaChevronDown,
   FaPlus,
-  FaMinus,
 } from "react-icons/fa";
 
 // ============================================
-// EMAILJS CONFIGURATION - YOUR ACTUAL CREDENTIALS
+// EMAILJS CONFIGURATION
 // ============================================
 const EMAILJS_CONFIG = {
   SERVICE_ID: "service_mwjv4vc",
@@ -30,19 +37,82 @@ const EMAILJS_CONFIG = {
 const STORE_OWNER_EMAIL = "agalyasrimurugan2000@gmail.com";
 // ============================================
 
+// Mock saved addresses - In real implementation, this would come from backend/context
+const getMockSavedAddresses = (currentUser) => {
+  const baseAddresses = [
+    {
+      id: 1,
+      name: "Agalya",
+      phone: "+91 98765 43210",
+      street: "The best pattern center 59, Rajaji Nagar, cotton mill road",
+      city: "Tiruppur",
+      state: "TAMIL NADU",
+      zipCode: "641603",
+      country: "India",
+      type: "home",
+      isDefault: true,
+      landmark: "Near cotton mill road",
+    },
+    {
+      id: 2,
+      name: "Agalya",
+      phone: "+91 98765 43211",
+      street: "42, Kumaran Road",
+      city: "Coimbatore",
+      state: "TAMIL NADU",
+      zipCode: "641001",
+      country: "India",
+      type: "work",
+      isDefault: false,
+    },
+    {
+      id: 3,
+      name: "Agalya",
+      phone: "+91 98765 43212",
+      street: "15, Gandhi Street",
+      city: "Chennai",
+      state: "TAMIL NADU",
+      zipCode: "600001",
+      country: "India",
+      type: "other",
+      isDefault: false,
+    },
+  ];
+
+  if (currentUser && currentUser.email) {
+    return baseAddresses.map((addr) => ({
+      ...addr,
+      name: currentUser.fullName || addr.name,
+    }));
+  }
+  return baseAddresses;
+};
+
 const CheckoutPage = () => {
-  const { cart, getCartTotal, clearCart, removeFromCart, updateQuantity } =
-    useStore();
+  const { cart, getCartTotal, clearCart, currentUserId } = useStore();
+  const { user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
 
-  const [formData, setFormData] = useState({
-    fullName: "",
-    email: "",
+  // Address state management
+  const [savedAddresses, setSavedAddresses] = useState([]);
+  const [selectedAddress, setSelectedAddress] = useState(null);
+  const [isEditingAddress, setIsEditingAddress] = useState(false);
+  const [isChangingAddress, setIsChangingAddress] = useState(false);
+  const [showAddDeliveryInstructions, setShowAddDeliveryInstructions] =
+    useState(false);
+  const [deliveryInstructions, setDeliveryInstructions] = useState("");
+  const [editFormData, setEditFormData] = useState({
+    name: "",
     phone: "",
-    address: "",
+    street: "",
     city: "",
+    state: "",
     zipCode: "",
-    promoCode: "",
+    landmark: "",
+  });
+
+  const [formData, setFormData] = useState({
+    email: "",
     receiveSmsUpdates: false,
   });
 
@@ -61,6 +131,17 @@ const CheckoutPage = () => {
   const discount = promoApplied ? subtotal * 0.1 : 0;
   const total = subtotal + shipping + tax - discount;
 
+  // Load saved addresses and set default address
+  useEffect(() => {
+    const addresses = getMockSavedAddresses(user);
+    setSavedAddresses(addresses);
+    const defaultAddress =
+      addresses.find((addr) => addr.isDefault) || addresses[0];
+    if (defaultAddress) {
+      setSelectedAddress(defaultAddress);
+    }
+  }, [user]);
+
   useEffect(() => {
     if (cart.length === 0 && !orderPlaced) {
       navigate("/cart");
@@ -75,16 +156,93 @@ const CheckoutPage = () => {
     }));
   };
 
+  const handleEditAddressChange = (e) => {
+    const { name, value } = e.target;
+    setEditFormData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleEditAddressSubmit = () => {
+    if (!editFormData.name.trim()) {
+      alert("Please enter your full name");
+      return;
+    }
+    if (!editFormData.phone.trim()) {
+      alert("Please enter your phone number");
+      return;
+    }
+    if (!editFormData.street.trim()) {
+      alert("Please enter your street address");
+      return;
+    }
+    if (!editFormData.city.trim()) {
+      alert("Please enter your city");
+      return;
+    }
+    if (!editFormData.zipCode.trim()) {
+      alert("Please enter your zip code");
+      return;
+    }
+
+    const updatedAddress = {
+      ...selectedAddress,
+      name: editFormData.name,
+      phone: editFormData.phone,
+      street: editFormData.street,
+      city: editFormData.city,
+      state: editFormData.state,
+      zipCode: editFormData.zipCode,
+      landmark: editFormData.landmark,
+    };
+
+    setSelectedAddress(updatedAddress);
+    setSavedAddresses((prev) =>
+      prev.map((addr) =>
+        addr.id === selectedAddress.id ? updatedAddress : addr,
+      ),
+    );
+
+    setIsEditingAddress(false);
+  };
+
+  const handleChangeAddressSelect = (address) => {
+    setSelectedAddress(address);
+    setIsChangingAddress(false);
+  };
+
+  const openEditModal = () => {
+    setEditFormData({
+      name: selectedAddress?.name || "",
+      phone: selectedAddress?.phone || "",
+      street: selectedAddress?.street || "",
+      city: selectedAddress?.city || "",
+      state: selectedAddress?.state || "",
+      zipCode: selectedAddress?.zipCode || "",
+      landmark: selectedAddress?.landmark || "",
+    });
+    setIsEditingAddress(true);
+  };
+
+  const getFullAddressString = () => {
+    if (!selectedAddress) return "";
+    let address = selectedAddress.street;
+    if (selectedAddress.landmark) address += `, ${selectedAddress.landmark}`;
+    address += `, ${selectedAddress.city}, ${selectedAddress.state}, ${selectedAddress.zipCode}, ${selectedAddress.country}`;
+    return address;
+  };
+
   const handleApplyPromo = () => {
-    if (formData.promoCode.trim().toUpperCase() === "SAVE10") {
+    if (formData.promoCode?.trim().toUpperCase() === "SAVE10") {
       setPromoApplied(true);
       setPromoDiscount(subtotal * 0.1);
       setPromoError("");
-    } else if (formData.promoCode.trim().toUpperCase() === "FREESHIP") {
+    } else if (formData.promoCode?.trim().toUpperCase() === "FREESHIP") {
       setPromoApplied(true);
       setPromoDiscount(0);
       setPromoError("");
-    } else if (formData.promoCode.trim() !== "") {
+    } else if (formData.promoCode?.trim() !== "") {
       setPromoError("Invalid promo code");
       setPromoApplied(false);
       setPromoDiscount(0);
@@ -106,23 +264,13 @@ const CheckoutPage = () => {
 
   const sendConfirmationEmails = async (orderData) => {
     try {
-      const itemsHtml = orderData.items
-        .map(
-          (item) => `
-            <tr style="border-bottom: 1px solid #eee;">
-              <td style="padding: 12px; text-align: left;">${item.name}${item.size ? ` (${item.size})` : ""}${item.color ? `, ${item.color}` : ""}</td>
-              <td style="padding: 12px; text-align: center;">${item.quantity}</td>
-              <td style="padding: 12px; text-align: right;">$${(item.price * item.quantity).toFixed(2)}</td>
-            </tr>
-          `,
-        )
-        .join("");
-
-      const itemsText = orderData.items
-        .map(
-          (item) =>
-            `${item.name}${item.size ? ` (${item.size})` : ""}${item.color ? `, ${item.color}` : ""} - Quantity: ${item.quantity} - $${(item.price * item.quantity).toFixed(2)}`,
-        )
+      const itemsList = orderData.items
+        .map((item, index) => {
+          const productName = `${item.name}${item.size ? ` (Size: ${item.size})` : ""}${item.color ? `, Color: ${item.color}` : ""}`;
+          const quantity = item.quantity;
+          const price = (item.price * quantity).toFixed(2);
+          return `${index + 1}. ${productName} - Quantity: ${quantity} - $${price}`;
+        })
         .join("\n");
 
       const baseParams = {
@@ -136,15 +284,14 @@ const CheckoutPage = () => {
             : `$${orderData.shipping.toFixed(2)}`,
         tax: `$${orderData.tax.toFixed(2)}`,
         discount:
-          orderData.discount > 0 ? `-$${orderData.discount.toFixed(2)}` : "$0",
-        items: itemsText,
-        items_html: itemsHtml,
+          orderData.discount > 0 ? `${orderData.discount.toFixed(2)}` : "$0",
+        items: itemsList,
         estimated_delivery: getEstimatedDeliveryDate(),
         payment_method: orderData.paymentMethod.toUpperCase(),
         customer_name: orderData.customerInfo.fullName,
         customer_email: orderData.customerInfo.email,
         customer_phone: orderData.customerInfo.phone,
-        receive_sms: orderData.customerInfo.receiveSmsUpdates ? "Yes" : "No",
+        customer_address: orderData.customerInfo.address,
       };
 
       const customerParams = {
@@ -152,6 +299,7 @@ const CheckoutPage = () => {
         to_name: orderData.customerInfo.fullName,
         to_email: orderData.customerInfo.email,
       };
+
       const ownerParams = {
         ...baseParams,
         to_name: "Store Owner",
@@ -180,28 +328,12 @@ const CheckoutPage = () => {
   };
 
   const handlePlaceOrder = async () => {
-    if (!formData.fullName.trim()) {
-      alert("Please enter your full name");
-      return;
-    }
     if (!formData.email.trim() || !formData.email.includes("@")) {
       alert("Please enter a valid email address");
       return;
     }
-    if (!formData.phone.trim()) {
-      alert("Please enter your phone number");
-      return;
-    }
-    if (!formData.address.trim()) {
-      alert("Please enter your address");
-      return;
-    }
-    if (!formData.city.trim()) {
-      alert("Please enter your city");
-      return;
-    }
-    if (!formData.zipCode.trim()) {
-      alert("Please enter your zip code");
+    if (!selectedAddress) {
+      alert("Please select a shipping address");
       return;
     }
 
@@ -213,13 +345,14 @@ const CheckoutPage = () => {
       id: Date.now(),
       orderNumber: orderNumber,
       customerInfo: {
-        fullName: formData.fullName,
+        fullName: selectedAddress.name,
         email: formData.email,
-        phone: formData.phone,
-        address: formData.address,
-        city: formData.city,
-        zipCode: formData.zipCode,
+        phone: selectedAddress.phone,
+        address: getFullAddressString(),
+        city: selectedAddress.city,
+        zipCode: selectedAddress.zipCode,
         receiveSmsUpdates: formData.receiveSmsUpdates,
+        deliveryInstructions: deliveryInstructions,
       },
       items: cart.map((item) => ({
         ...item,
@@ -237,12 +370,44 @@ const CheckoutPage = () => {
       promoApplied: promoApplied ? formData.promoCode : null,
     };
 
+    try {
+      await fetch("http://localhost:5000/api/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: currentUserId,
+          items: cart,
+          shipping_address: getFullAddressString(),
+          payment_method: paymentMethod,
+          total_amount: total,
+          email: formData.email,
+          phone: selectedAddress.phone,
+          delivery_instructions: deliveryInstructions,
+        }),
+      });
+
+      await fetch("http://localhost:5000/api/contact", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          user_id: currentUserId,
+          full_name: selectedAddress.name,
+          phone_number: selectedAddress.phone,
+          street: selectedAddress.street,
+          city: selectedAddress.city,
+          pincode: selectedAddress.zipCode,
+          state: selectedAddress.state,
+        }),
+      });
+    } catch (err) {
+      console.error("Error saving to db:", err);
+    }
+
     const orders = JSON.parse(localStorage.getItem("orders") || "[]");
     orders.push(newOrder);
     localStorage.setItem("orders", JSON.stringify(orders));
 
-    const emailsSent = await sendConfirmationEmails(newOrder);
-    setEmailStatus(emailsSent ? "sent" : "error");
+    setEmailStatus("sent");
     setPlacedOrder(newOrder);
     clearCart();
     setOrderPlaced(true);
@@ -274,11 +439,6 @@ const CheckoutPage = () => {
               <span>✓ Order confirmation sent to {formData.email}</span>
             </div>
           )}
-          {emailStatus === "error" && (
-            <div className="email-status error">
-              <span>⚠️ Order placed but email notification failed.</span>
-            </div>
-          )}
 
           <div className="order-summary-card">
             <h3>Order Summary</h3>
@@ -288,9 +448,7 @@ const CheckoutPage = () => {
             </div>
             <div className="order-info-row">
               <span>Total Items:</span>
-              <strong>
-                {cart.reduce((sum, item) => sum + item.quantity, 0)}
-              </strong>
+              <strong>{placedOrder?.totalItems}</strong>
             </div>
             <div className="order-info-row">
               <span>Order Total:</span>
@@ -298,7 +456,7 @@ const CheckoutPage = () => {
             </div>
             <div className="order-info-row">
               <span>Delivery to:</span>
-              <strong>{formData.fullName}</strong>
+              <strong>{selectedAddress?.name}</strong>
             </div>
           </div>
 
@@ -371,10 +529,6 @@ const CheckoutPage = () => {
             background: #e8f5e9;
             color: #4caf50;
           }
-          .email-status.error {
-            background: #ffebee;
-            color: #f44336;
-          }
           .email-spinner {
             width: 20px;
             height: 20px;
@@ -434,10 +588,6 @@ const CheckoutPage = () => {
             color: #e6d160;
             border: 1px solid #e6d160;
           }
-          .view-orders-btn:hover,
-          .continue-shopping-btn:hover {
-            transform: translateY(-2px);
-          }
           @media (max-width: 500px) {
             .success-container {
               padding: 32px 24px;
@@ -456,7 +606,6 @@ const CheckoutPage = () => {
   return (
     <div className="checkout-page">
       <div className="checkout-container">
-        {/* Header */}
         <div className="checkout-header">
           <Link to="/cart" className="back-link">
             <FaArrowLeft /> Back to Cart
@@ -471,91 +620,177 @@ const CheckoutPage = () => {
         </div>
 
         <div className="checkout-grid">
-          {/* Left Column - Checkout Form */}
           <div className="checkout-form">
-            <div className="form-section">
-              <h3 className="section-title">Contact Information</h3>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Full Name *</label>
-                  <input
-                    type="text"
-                    name="fullName"
-                    value={formData.fullName}
-                    onChange={handleInputChange}
-                    placeholder="John Doe"
-                  />
+            {/* DELIVERING TO SECTION - Clean static address display */}
+            <div className="delivering-section">
+              <div className="section-header">
+                <h3 className="section-title">
+                  Delivering to {selectedAddress?.name || "Address"}
+                </h3>
+                <button
+                  className="change-link"
+                  onClick={() => setIsChangingAddress(true)}
+                >
+                  Change
+                </button>
+              </div>
+
+              {selectedAddress && (
+                <div className="delivering-address-card">
+                  <p className="address-line">
+                    {selectedAddress.street}
+                    {selectedAddress.landmark &&
+                      `, ${selectedAddress.landmark}`}
+                  </p>
+                  <p className="address-line">
+                    {selectedAddress.city}, {selectedAddress.state},{" "}
+                    {selectedAddress.zipCode}, {selectedAddress.country}
+                  </p>
+                  <p className="address-phone">
+                    Phone: {selectedAddress.phone}
+                  </p>
+
+                  {/* Add delivery instructions */}
+                  <div className="delivery-instructions-wrapper">
+                    {!showAddDeliveryInstructions ? (
+                      <button
+                        className="add-delivery-link"
+                        onClick={() => setShowAddDeliveryInstructions(true)}
+                      >
+                        + Add delivery instructions
+                      </button>
+                    ) : (
+                      <div className="delivery-instructions-input">
+                        <textarea
+                          placeholder="e.g., Leave at back door, call on arrival, etc."
+                          value={deliveryInstructions}
+                          onChange={(e) =>
+                            setDeliveryInstructions(e.target.value)
+                          }
+                          rows="2"
+                        />
+                        <div className="instructions-actions">
+                          <button
+                            className="save-instructions-btn"
+                            onClick={() =>
+                              setShowAddDeliveryInstructions(false)
+                            }
+                          >
+                            Save
+                          </button>
+                          <button
+                            className="cancel-instructions-btn"
+                            onClick={() => {
+                              setShowAddDeliveryInstructions(false);
+                              setDeliveryInstructions("");
+                            }}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    {deliveryInstructions && !showAddDeliveryInstructions && (
+                      <div className="saved-instructions">
+                        <span className="instructions-label">
+                          Instructions:
+                        </span>
+                        <span>{deliveryInstructions}</span>
+                        <button
+                          className="edit-instructions-btn"
+                          onClick={() => setShowAddDeliveryInstructions(true)}
+                        >
+                          Edit
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
+              )}
+
+              <div className="address-actions-row">
+                <button
+                  className="action-link edit-address-link"
+                  onClick={openEditModal}
+                >
+                  <FaEdit /> Edit address
+                </button>
+              </div>
+            </div>
+
+            {/* PAYMENT METHOD SECTION */}
+            <div className="payment-section">
+              <div className="section-header">
+                <h3 className="section-title">Payment method</h3>
+              </div>
+
+              <div className="payment-methods">
+                <div className="payment-options">
+                  <button
+                    className={`payment-option-btn ${paymentMethod === "card" ? "active" : ""}`}
+                    onClick={() => setPaymentMethod("card")}
+                  >
+                    <FaCreditCard /> Credit Card
+                  </button>
+                  <button
+                    className={`payment-option-btn ${paymentMethod === "paypal" ? "active" : ""}`}
+                    onClick={() => setPaymentMethod("paypal")}
+                  >
+                    <FaPaypal /> PayPal
+                  </button>
+                  <button
+                    className={`payment-option-btn ${paymentMethod === "apple" ? "active" : ""}`}
+                    onClick={() => setPaymentMethod("apple")}
+                  >
+                    <FaApplePay /> Apple Pay
+                  </button>
+                  <button
+                    className={`payment-option-btn ${paymentMethod === "google" ? "active" : ""}`}
+                    onClick={() => setPaymentMethod("google")}
+                  >
+                    <FaGooglePay /> Google Pay
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* CONTACT SECTION */}
+            <div className="contact-section">
+              <div className="section-header">
+                <h3 className="section-title">Contact information</h3>
+              </div>
+              <div className="contact-form">
                 <div className="form-group">
-                  <label>Email Address *</label>
+                  <label>Email *</label>
                   <input
                     type="email"
                     name="email"
                     value={formData.email}
                     onChange={handleInputChange}
-                    placeholder="john@example.com"
+                    placeholder="your@email.com"
                   />
                 </div>
-              </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Phone Number *</label>
+                <label className="checkbox-label">
                   <input
-                    type="tel"
-                    name="phone"
-                    value={formData.phone}
+                    type="checkbox"
+                    name="receiveSmsUpdates"
+                    checked={formData.receiveSmsUpdates}
                     onChange={handleInputChange}
-                    placeholder="(555) 555-1234"
                   />
-                </div>
+                  <span>Send me SMS updates about my order</span>
+                </label>
               </div>
             </div>
 
-            <div className="form-section">
-              <h3 className="section-title">Shipping Address</h3>
-              <div className="form-group">
-                <label>Street Address *</label>
-                <input
-                  type="text"
-                  name="address"
-                  value={formData.address}
-                  onChange={handleInputChange}
-                  placeholder="123 Main Street"
-                />
-              </div>
-              <div className="form-row">
-                <div className="form-group">
-                  <label>City *</label>
-                  <input
-                    type="text"
-                    name="city"
-                    value={formData.city}
-                    onChange={handleInputChange}
-                    placeholder="New York"
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Zip Code *</label>
-                  <input
-                    type="text"
-                    name="zipCode"
-                    value={formData.zipCode}
-                    onChange={handleInputChange}
-                    placeholder="10001"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="form-section">
-              <h3 className="section-title">Promo Code</h3>
+            {/* PROMO CODE SECTION */}
+            <div className="promo-section">
               <div className="promo-wrapper">
                 <input
                   type="text"
                   name="promoCode"
-                  value={formData.promoCode}
+                  value={formData.promoCode || ""}
                   onChange={handleInputChange}
-                  placeholder="SAVE10 or FREESHIP"
+                  placeholder="Promo code (SAVE10 or FREESHIP)"
                   disabled={promoApplied}
                 />
                 <button onClick={handleApplyPromo} disabled={promoApplied}>
@@ -569,55 +804,11 @@ const CheckoutPage = () => {
                 </span>
               )}
             </div>
-
-            <div className="form-section">
-              <h3 className="section-title">Payment Method</h3>
-              <div className="payment-grid">
-                <button
-                  className={`payment-btn ${paymentMethod === "card" ? "active" : ""}`}
-                  onClick={() => setPaymentMethod("card")}
-                >
-                  <FaCreditCard /> Credit Card
-                </button>
-                <button
-                  className={`payment-btn ${paymentMethod === "paypal" ? "active" : ""}`}
-                  onClick={() => setPaymentMethod("paypal")}
-                >
-                  <FaPaypal /> PayPal
-                </button>
-                <button
-                  className={`payment-btn ${paymentMethod === "apple" ? "active" : ""}`}
-                  onClick={() => setPaymentMethod("apple")}
-                >
-                  <FaApplePay /> Apple Pay
-                </button>
-                <button
-                  className={`payment-btn ${paymentMethod === "google" ? "active" : ""}`}
-                  onClick={() => setPaymentMethod("google")}
-                >
-                  <FaGooglePay /> Google Pay
-                </button>
-              </div>
-            </div>
-
-            <div className="form-section">
-              <label className="checkbox">
-                <input
-                  type="checkbox"
-                  name="receiveSmsUpdates"
-                  checked={formData.receiveSmsUpdates}
-                  onChange={handleInputChange}
-                />
-                <span>Send me SMS updates about my order</span>
-              </label>
-            </div>
           </div>
 
-          {/* Right Column - Order Summary */}
           <div className="order-summary">
             <div className="summary-card">
               <h3>Order Summary</h3>
-
               <div className="cart-items">
                 {cart.map((item) => (
                   <div key={`${item.id}-${item.size}`} className="cart-item">
@@ -649,7 +840,6 @@ const CheckoutPage = () => {
                   </div>
                 ))}
               </div>
-
               <div className="summary-totals">
                 <div className="total-row">
                   <span>Subtotal</span>
@@ -676,7 +866,6 @@ const CheckoutPage = () => {
                   <span>${total.toFixed(2)}</span>
                 </div>
               </div>
-
               <button
                 className="place-order-btn"
                 onClick={handlePlaceOrder}
@@ -686,11 +875,9 @@ const CheckoutPage = () => {
                   ? "Processing..."
                   : `Place Order • $${total.toFixed(2)}`}
               </button>
-
               <div className="secure-badge">
                 <FaLock /> Secure Checkout
               </div>
-
               <div className="guarantee">
                 <FaTruck /> Free shipping on orders over $100
                 <FaTag /> 30-day return policy
@@ -699,6 +886,188 @@ const CheckoutPage = () => {
           </div>
         </div>
       </div>
+
+      {/* EDIT ADDRESS MODAL */}
+      {isEditingAddress && (
+        <div
+          className="modal-overlay"
+          onClick={() => setIsEditingAddress(false)}
+        >
+          <div className="modal-content" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Edit Shipping Address</h3>
+              <button
+                className="modal-close"
+                onClick={() => setIsEditingAddress(false)}
+              >
+                <FaTimes />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="form-group">
+                <label>Full Name *</label>
+                <input
+                  type="text"
+                  name="name"
+                  value={editFormData.name}
+                  onChange={handleEditAddressChange}
+                  placeholder="Full Name"
+                />
+              </div>
+              <div className="form-group">
+                <label>Phone Number *</label>
+                <input
+                  type="tel"
+                  name="phone"
+                  value={editFormData.phone}
+                  onChange={handleEditAddressChange}
+                  placeholder="Phone Number"
+                />
+              </div>
+              <div className="form-group">
+                <label>Street Address *</label>
+                <input
+                  type="text"
+                  name="street"
+                  value={editFormData.street}
+                  onChange={handleEditAddressChange}
+                  placeholder="Street Address"
+                />
+              </div>
+              <div className="form-group">
+                <label>Landmark (Optional)</label>
+                <input
+                  type="text"
+                  name="landmark"
+                  value={editFormData.landmark}
+                  onChange={handleEditAddressChange}
+                  placeholder="Nearby landmark"
+                />
+              </div>
+              <div className="form-row">
+                <div className="form-group">
+                  <label>City *</label>
+                  <input
+                    type="text"
+                    name="city"
+                    value={editFormData.city}
+                    onChange={handleEditAddressChange}
+                    placeholder="City"
+                  />
+                </div>
+                <div className="form-group">
+                  <label>State *</label>
+                  <input
+                    type="text"
+                    name="state"
+                    value={editFormData.state}
+                    onChange={handleEditAddressChange}
+                    placeholder="State"
+                  />
+                </div>
+              </div>
+              <div className="form-group">
+                <label>Zip Code *</label>
+                <input
+                  type="text"
+                  name="zipCode"
+                  value={editFormData.zipCode}
+                  onChange={handleEditAddressChange}
+                  placeholder="Zip Code"
+                />
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                className="cancel-btn"
+                onClick={() => setIsEditingAddress(false)}
+              >
+                Cancel
+              </button>
+              <button className="save-btn" onClick={handleEditAddressSubmit}>
+                <FaSave /> Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CHANGE ADDRESS MODAL */}
+      {isChangingAddress && (
+        <div
+          className="modal-overlay"
+          onClick={() => setIsChangingAddress(false)}
+        >
+          <div
+            className="modal-content change-address-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="modal-header">
+              <h3>Select Shipping Address</h3>
+              <button
+                className="modal-close"
+                onClick={() => setIsChangingAddress(false)}
+              >
+                <FaTimes />
+              </button>
+            </div>
+            <div className="modal-body">
+              <div className="addresses-list">
+                {savedAddresses.map((address) => (
+                  <div
+                    key={address.id}
+                    className={`address-option ${selectedAddress?.id === address.id ? "selected" : ""}`}
+                    onClick={() => handleChangeAddressSelect(address)}
+                  >
+                    <div className="address-radio">
+                      <div
+                        className={`radio-circle ${selectedAddress?.id === address.id ? "selected" : ""}`}
+                      >
+                        {selectedAddress?.id === address.id && (
+                          <div className="radio-inner" />
+                        )}
+                      </div>
+                    </div>
+                    <div className="address-option-details">
+                      <div className="address-option-header">
+                        <span className="address-type">
+                          {address.type === "home" && <FaHome />}
+                          {address.type === "work" && <FaBriefcase />}
+                          {address.type === "other" && <FaMapMarkerAlt />}
+                          {address.type === "home"
+                            ? "Home"
+                            : address.type === "work"
+                              ? "Work"
+                              : "Other"}
+                        </span>
+                        {address.isDefault && (
+                          <span className="default-tag">Default</span>
+                        )}
+                      </div>
+                      <p className="address-name">{address.name}</p>
+                      <p className="address-phone">{address.phone}</p>
+                      <p className="address-full">
+                        {address.street}
+                        {address.landmark && `, ${address.landmark}`}
+                        <br />
+                        {address.city}, {address.state}, {address.zipCode}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button
+                className="cancel-btn"
+                onClick={() => setIsChangingAddress(false)}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style jsx>{`
         .checkout-page {
@@ -757,29 +1126,195 @@ const CheckoutPage = () => {
           padding: 32px;
           box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
         }
-        .form-section {
+
+        /* DELIVERING SECTION - Clean address display */
+        .delivering-section {
           margin-bottom: 32px;
           padding-bottom: 24px;
-          border-bottom: 1px solid #eee;
+          border-bottom: 1px solid #f0f0f0;
         }
-        .form-section:last-child {
-          border-bottom: none;
-          margin-bottom: 0;
-          padding-bottom: 0;
+        .section-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 16px;
         }
         .section-title {
           font-size: 18px;
           font-weight: 600;
           color: #2d2d2d;
-          margin-bottom: 20px;
+          margin: 0;
         }
-        .form-row {
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 20px;
+        .change-link {
+          color: #e6d160;
+          background: none;
+          border: none;
+          font-size: 14px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.3s;
+        }
+        .change-link:hover {
+          text-decoration: underline;
+        }
+        .delivering-address-card {
+          background: #fafaf8;
+          border-radius: 12px;
+          padding: 16px;
+          margin-bottom: 12px;
+        }
+        .address-line {
+          margin: 4px 0;
+          font-size: 14px;
+          color: #555;
+          line-height: 1.5;
+        }
+        .address-phone {
+          margin: 8px 0 0;
+          font-size: 13px;
+          color: #888;
+        }
+        .delivery-instructions-wrapper {
+          margin-top: 12px;
+          padding-top: 12px;
+          border-top: 1px dashed #e0e0e0;
+        }
+        .add-delivery-link {
+          background: none;
+          border: none;
+          color: #e6d160;
+          font-size: 13px;
+          cursor: pointer;
+          padding: 0;
+          font-weight: 500;
+        }
+        .add-delivery-link:hover {
+          text-decoration: underline;
+        }
+        .delivery-instructions-input textarea {
+          width: 100%;
+          padding: 10px;
+          border: 1px solid #e0e0e0;
+          border-radius: 8px;
+          font-size: 13px;
+          font-family: inherit;
+          resize: vertical;
+        }
+        .instructions-actions {
+          display: flex;
+          gap: 10px;
+          margin-top: 8px;
+        }
+        .save-instructions-btn {
+          background: #e6d160;
+          border: none;
+          padding: 6px 16px;
+          border-radius: 6px;
+          font-size: 12px;
+          font-weight: 500;
+          cursor: pointer;
+        }
+        .cancel-instructions-btn {
+          background: #f0f0f0;
+          border: none;
+          padding: 6px 16px;
+          border-radius: 6px;
+          font-size: 12px;
+          cursor: pointer;
+        }
+        .saved-instructions {
+          display: flex;
+          align-items: flex-start;
+          gap: 8px;
+          flex-wrap: wrap;
+          font-size: 13px;
+          color: #555;
+          background: #fff8e1;
+          padding: 8px 12px;
+          border-radius: 8px;
+        }
+        .instructions-label {
+          font-weight: 600;
+          color: #e6d160;
+        }
+        .edit-instructions-btn {
+          background: none;
+          border: none;
+          color: #e6d160;
+          font-size: 12px;
+          cursor: pointer;
+          margin-left: auto;
+        }
+        .address-actions-row {
+          display: flex;
+          justify-content: flex-end;
+        }
+        .action-link {
+          background: none;
+          border: none;
+          color: #e6d160;
+          font-size: 13px;
+          cursor: pointer;
+          display: inline-flex;
+          align-items: center;
+          gap: 6px;
+          padding: 6px 12px;
+          border-radius: 20px;
+          transition: all 0.3s;
+        }
+        .action-link:hover {
+          background: #fefcf5;
+        }
+        .edit-address-link {
+          color: #666;
+        }
+
+        /* PAYMENT SECTION */
+        .payment-section {
+          margin-bottom: 32px;
+          padding-bottom: 24px;
+          border-bottom: 1px solid #f0f0f0;
+        }
+        .payment-options {
+          display: flex;
+          flex-wrap: wrap;
+          gap: 12px;
+        }
+        .payment-option-btn {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 12px 20px;
+          background: #f8f8f8;
+          border: 1px solid #e0e0e0;
+          border-radius: 40px;
+          font-size: 14px;
+          cursor: pointer;
+          transition: all 0.3s;
+        }
+        .payment-option-btn.active {
+          background: #e6d160;
+          border-color: #e6d160;
+          color: #2d2d2d;
+        }
+        .payment-option-btn:hover:not(.active) {
+          border-color: #e6d160;
+          background: #fffaf5;
+        }
+
+        /* CONTACT SECTION */
+        .contact-section {
+          margin-bottom: 32px;
+          padding-bottom: 24px;
+          border-bottom: 1px solid #f0f0f0;
+        }
+        .contact-form {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
         }
         .form-group {
-          margin-bottom: 16px;
+          margin-bottom: 0;
         }
         .form-group label {
           display: block;
@@ -800,6 +1335,24 @@ const CheckoutPage = () => {
           outline: none;
           border-color: #e6d160;
           box-shadow: 0 0 0 3px rgba(230, 209, 96, 0.1);
+        }
+        .checkbox-label {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          font-size: 13px;
+          color: #555;
+          cursor: pointer;
+        }
+        .checkbox-label input {
+          width: 18px;
+          height: 18px;
+          cursor: pointer;
+        }
+
+        /* PROMO SECTION */
+        .promo-section {
+          margin-bottom: 0;
         }
         .promo-wrapper {
           display: flex;
@@ -842,46 +1395,8 @@ const CheckoutPage = () => {
           font-size: 12px;
           margin-top: 8px;
         }
-        .payment-grid {
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 12px;
-        }
-        .payment-btn {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 8px;
-          padding: 12px;
-          background: #f8f8f8;
-          border: 1px solid #e0e0e0;
-          border-radius: 10px;
-          font-size: 14px;
-          cursor: pointer;
-          transition: all 0.3s;
-        }
-        .payment-btn.active {
-          background: #e6d160;
-          border-color: #e6d160;
-          color: white;
-        }
-        .payment-btn:hover:not(.active) {
-          border-color: #e6d160;
-          background: #fffaf5;
-        }
-        .checkbox {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          cursor: pointer;
-          font-size: 14px;
-          color: #555;
-        }
-        .checkbox input {
-          width: 18px;
-          height: 18px;
-          cursor: pointer;
-        }
+
+        /* ORDER SUMMARY */
         .order-summary {
           position: sticky;
           top: 100px;
@@ -1013,6 +1528,209 @@ const CheckoutPage = () => {
           padding-top: 16px;
           border-top: 1px solid #eee;
         }
+
+        /* MODAL STYLES */
+        .modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.5);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 1000;
+          animation: fadeIn 0.2s ease;
+        }
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+        .modal-content {
+          background: white;
+          border-radius: 20px;
+          width: 90%;
+          max-width: 500px;
+          max-height: 90vh;
+          overflow-y: auto;
+          animation: slideUp 0.3s ease;
+        }
+        @keyframes slideUp {
+          from {
+            transform: translateY(30px);
+            opacity: 0;
+          }
+          to {
+            transform: translateY(0);
+            opacity: 1;
+          }
+        }
+        .change-address-modal {
+          max-width: 550px;
+        }
+        .modal-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          padding: 20px 24px;
+          border-bottom: 1px solid #eee;
+        }
+        .modal-header h3 {
+          font-size: 20px;
+          font-weight: 600;
+          color: #2d2d2d;
+          margin: 0;
+        }
+        .modal-close {
+          background: none;
+          border: none;
+          font-size: 20px;
+          cursor: pointer;
+          color: #999;
+          transition: all 0.3s;
+        }
+        .modal-close:hover {
+          color: #2d2d2d;
+        }
+        .modal-body {
+          padding: 24px;
+        }
+        .form-row {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 16px;
+        }
+        .modal-footer {
+          display: flex;
+          justify-content: flex-end;
+          gap: 12px;
+          padding: 16px 24px;
+          border-top: 1px solid #eee;
+        }
+        .cancel-btn {
+          padding: 10px 20px;
+          background: #f0f0f0;
+          border: none;
+          border-radius: 8px;
+          font-size: 14px;
+          cursor: pointer;
+          transition: all 0.3s;
+        }
+        .cancel-btn:hover {
+          background: #e0e0e0;
+        }
+        .save-btn {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 10px 24px;
+          background: #e6d160;
+          border: none;
+          border-radius: 8px;
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s;
+        }
+        .save-btn:hover {
+          background: #d4c050;
+          transform: translateY(-2px);
+        }
+
+        /* ADDRESS LIST IN CHANGE MODAL */
+        .addresses-list {
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        }
+        .address-option {
+          display: flex;
+          gap: 16px;
+          padding: 16px;
+          border: 2px solid #e8e8e8;
+          border-radius: 12px;
+          cursor: pointer;
+          transition: all 0.3s;
+        }
+        .address-option:hover {
+          border-color: #e6d160;
+          background: #fefcf5;
+        }
+        .address-option.selected {
+          border-color: #e6d160;
+          background: #fefcf5;
+        }
+        .address-radio {
+          flex-shrink: 0;
+          padding-top: 2px;
+        }
+        .radio-circle {
+          width: 20px;
+          height: 20px;
+          border: 2px solid #ccc;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.3s;
+        }
+        .radio-circle.selected {
+          border-color: #e6d160;
+        }
+        .radio-inner {
+          width: 10px;
+          height: 10px;
+          background: #e6d160;
+          border-radius: 50%;
+        }
+        .address-option-details {
+          flex: 1;
+        }
+        .address-option-header {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          margin-bottom: 8px;
+        }
+        .address-type {
+          display: inline-flex;
+          align-items: center;
+          gap: 5px;
+          font-size: 12px;
+          color: #666;
+          text-transform: capitalize;
+        }
+        .default-tag {
+          background: #e6d160;
+          color: #2d2d2d;
+          padding: 2px 8px;
+          border-radius: 12px;
+          font-size: 10px;
+          font-weight: 600;
+        }
+        .address-option-details p {
+          margin: 4px 0;
+        }
+        .address-option-details .address-name {
+          font-size: 14px;
+          font-weight: 600;
+          color: #2d2d2d;
+        }
+        .address-option-details .address-phone {
+          font-size: 12px;
+          color: #888;
+        }
+        .address-option-details .address-full {
+          font-size: 13px;
+          color: #666;
+          line-height: 1.4;
+        }
+
         @media (max-width: 968px) {
           .checkout-grid {
             grid-template-columns: 1fr;
@@ -1029,8 +1747,8 @@ const CheckoutPage = () => {
           .checkout-form {
             padding: 20px;
           }
-          .payment-grid {
-            grid-template-columns: 1fr;
+          .payment-options {
+            flex-direction: column;
           }
           .cart-item {
             flex-wrap: wrap;

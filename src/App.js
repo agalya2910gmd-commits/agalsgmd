@@ -1,4 +1,3 @@
-// App.js
 import "./App.css";
 import {
   BrowserRouter as Router,
@@ -31,10 +30,9 @@ import ProfilePage from "./components/ProfilePage";
 import Login from "./components/Auth/Login";
 import Signup from "./components/Auth/Signup";
 import ProtectedRoute from "./components/Auth/ProtectedRoute";
-import SellerDashboard from "./components/SellerDashboard";
+import SellerDashboardWrapper from "./components/SellerDashboardWrapper"; // Changed from SellerDashboard
 import AdminDashboard from "./components/Admin/AdminDashboard";
 
-// Home page with navbar only inside hero section
 function HomePage() {
   return (
     <>
@@ -52,17 +50,14 @@ function HomePage() {
   );
 }
 
-// Wrapper component for routes
 function AppContent() {
   const location = useLocation();
 
-  // Check if current route is admin route
   const isAdminRoute = location.pathname.startsWith("/admin");
 
   return (
     <div className="App">
       <Routes>
-        {/* Public Routes */}
         <Route path="/" element={<HomePage />} />
         <Route
           path="/shop"
@@ -146,11 +141,9 @@ function AppContent() {
           }
         />
 
-        {/* Auth Routes - No Navbar */}
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />
 
-        {/* Protected Profile Route */}
         <Route
           path="/profile"
           element={
@@ -163,17 +156,15 @@ function AppContent() {
           }
         />
 
-        {/* Seller Dashboard Protected Route - No Navbar */}
         <Route
           path="/seller-dashboard"
           element={
             <ProtectedRoute requireSeller={true}>
-              <SellerDashboard />
+              <SellerDashboardWrapper /> {/* Changed from SellerDashboard */}
             </ProtectedRoute>
           }
         />
 
-        {/* Admin Dashboard Routes - No Navbar, Full page admin dashboard */}
         <Route
           path="/admin"
           element={
@@ -247,14 +238,12 @@ function AppContent() {
           }
         />
 
-        {/* Catch all - redirect to home */}
         <Route path="*" element={<HomePage />} />
       </Routes>
     </div>
   );
 }
 
-// Main App
 function App() {
   return (
     <AuthProvider>

@@ -7,7 +7,9 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [userType, setUserType] = useState(null); // "customer", "seller", or "admin"
+  const [userType, setUserType] = useState(null);
+
+  const [profileImage, setProfileImage] = useState(null);
 
   useEffect(() => {
     const storedUser = localStorage.getItem("nivest_user");
@@ -18,11 +20,21 @@ export function AuthProvider({ children }) {
       setUser(parsed);
       setIsAuthenticated(true);
       setUserType(storedUserType || getUserTypeFromRole(parsed));
+      
+      // Load profile image
+      const savedImg = localStorage.getItem(`profile_image_${parsed.id}`);
+      if (savedImg) setProfileImage(savedImg);
     }
     setLoading(false);
   }, []);
 
-  // Helper function to determine user type from user object
+  const updateProfileImage = (imageData) => {
+    if (user?.id) {
+      setProfileImage(imageData);
+      localStorage.setItem(`profile_image_${user.id}`, imageData);
+    }
+  };
+
   const getUserTypeFromRole = (userObj) => {
     if (userObj.role === "admin" || userObj.isAdmin === true) return "admin";
     if (userObj.isSeller === true || userObj.role === "seller") return "seller";
@@ -30,8 +42,11 @@ export function AuthProvider({ children }) {
   };
 
   const login = (userData) => {
+    // Make sure user has email
     const userObj = {
       ...userData,
+      id: userData.id || Math.floor(Date.now() / 1000),
+      email: userData.email,
       isSeller: userData.isSeller === true || userData.role === "seller",
       isAdmin: userData.isAdmin === true || userData.role === "admin",
     };
@@ -42,11 +57,18 @@ export function AuthProvider({ children }) {
     setUserType(userTypeValue);
     localStorage.setItem("nivest_user", JSON.stringify(userObj));
     localStorage.setItem("nivest_user_type", userTypeValue);
+
+    // Load user-specific image on login
+    const savedImg = localStorage.getItem(`profile_image_${userObj.id}`);
+    setProfileImage(savedImg || null);
   };
 
   const signup = (userData) => {
+    // Make sure user has email
     const userObj = {
       ...userData,
+      id: userData.id || Math.floor(Date.now() / 1000),
+      email: userData.email,
       isSeller: userData.isSeller === true || userData.role === "seller",
       isAdmin: userData.isAdmin === true || userData.role === "admin",
     };
@@ -57,37 +79,26 @@ export function AuthProvider({ children }) {
     setUserType(userTypeValue);
     localStorage.setItem("nivest_user", JSON.stringify(userObj));
     localStorage.setItem("nivest_user_type", userTypeValue);
+    setProfileImage(null);
   };
 
   const logout = () => {
     setUser(null);
     setIsAuthenticated(false);
     setUserType(null);
+    setProfileImage(null);
     localStorage.removeItem("nivest_user");
     localStorage.removeItem("nivest_user_type");
+    // DON'T clear onboarding data - keep it for each seller
   };
 
-  // Role check helpers
   const isSeller = user?.isSeller === true || user?.role === "seller";
   const isAdmin = user?.isAdmin === true || user?.role === "admin";
   const isCustomer = !isSeller && !isAdmin && user !== null;
 
-  // Helper function to check if user has seller access
-  const hasSellerAccess = () => {
-    return isAuthenticated && isSeller;
-  };
-
-  // Helper function to check if user has customer access
-  const hasCustomerAccess = () => {
-    return isAuthenticated && isCustomer;
-  };
-
-  // Helper function to check if user has admin access
-  const hasAdminAccess = () => {
-    return isAuthenticated && isAdmin;
-  };
-
-  // Helper function to get user role
+  const hasSellerAccess = () => isAuthenticated && isSeller;
+  const hasCustomerAccess = () => isAuthenticated && isCustomer;
+  const hasAdminAccess = () => isAuthenticated && isAdmin;
   const getUserRole = () => {
     if (isAdmin) return "admin";
     if (isSeller) return "seller";
@@ -105,6 +116,8 @@ export function AuthProvider({ children }) {
         isSeller,
         isAdmin,
         isCustomer,
+        profileImage,
+        updateProfileImage,
         login,
         signup,
         logout,

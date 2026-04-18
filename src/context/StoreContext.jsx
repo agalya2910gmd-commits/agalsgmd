@@ -1,5 +1,7 @@
 // src/context/StoreContext.jsx
-import React, { createContext, useState, useContext, useEffect } from "react";
+import React, { createContext, useState, useContext, useEffect, useRef } from "react";
+import emailjs from "@emailjs/browser";
+import { useAuth } from "./AuthContext";
 
 const StoreContext = createContext();
 
@@ -12,6 +14,22 @@ export const useStore = () => {
 };
 
 export const StoreProvider = ({ children }) => {
+  const { user, isAuthenticated } = useAuth();
+  const sentCartEmailsRef = useRef(new Set());
+
+  const [guestId] = useState(() => {
+    let gid = localStorage.getItem("nivest_guest_id");
+    if (!gid) {
+      gid = Math.floor(Math.random() * 2000000000);
+      localStorage.setItem("nivest_guest_id", gid.toString());
+    }
+    return parseInt(gid, 10);
+  });
+
+  const currentUserId = (isAuthenticated && user?.id) 
+    ? (user.id > 2147483647 ? Math.floor(user.id/1000) : user.id) 
+    : guestId;
+
   const [cart, setCart] = useState(() => {
     const savedCart = localStorage.getItem("cart");
     return savedCart ? JSON.parse(savedCart) : [];
@@ -34,30 +52,125 @@ export const StoreProvider = ({ children }) => {
     localStorage.setItem("wishlist", JSON.stringify(wishlist));
   }, [wishlist]);
 
-  const addToCart = (product, size = null, quantity = 1) => {
-    setCart((prevCart) => {
-      let price = product.price;
-      if (typeof price === "string") {
-        price = parseFloat(price.replace(/[₹,]/g, ""));
-      }
-
-      const existingItem = prevCart.find((item) => {
-        if (size === null || !item.size) {
-          return item.id === product.id;
+  // Always fetch DB context universally using currentUserId
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const cartRes = await fetch(`http://localhost:5000/api/cart/${currentUserId}`);
+        if (cartRes.ok) {
+          const cartData = await cartRes.json();
+          const formattedCart = cartData.map(item => ({
+            id: item.product_id,
+            db_id: item.id,
+            name: item.product_name,
+            price: parseFloat(item.price) || 0,
+            image: item.product_image,
+            quantity: item.quantity || 1
+          }));
+          setCart(formattedCart);
         }
-        return item.id === product.id && item.size === size;
+
+        const wishRes = await fetch(`http://localhost:5000/api/wishlist/${currentUserId}`);
+        if (wishRes.ok) {
+          const wishData = await wishRes.json();
+          const formattedWish = wishData.map(item => ({
+            id: item.product_id,
+            db_id: item.id,
+            name: item.product_name,
+            price: parseFloat(item.price) || 0,
+            image: item.product_image
+          }));
+          setWishlist(formattedWish);
+        }
+      } catch (err) {
+        console.error("Error fetching DB cart/wishlist", err);
+      }
+    };
+    fetchUserData();
+  }, [currentUserId]);
+
+  const addToCart = async (product, size = null, quantity = 1) => {
+    let price = product.price;
+    if (typeof price === "string") {
+      price = parseFloat(price.replace(/[₹,$\s]/g, ""));
+    }
+
+    const productId = product.id || product._id;
+    const newItemData = {
+      product_id: productId,
+      product_name: product.name,
+      product_image: product.image || (product.images && product.images[0]) || "https://via.placeholder.com/400",
+      price: price || 0,
+      quantity: quantity
+    };
+
+    try {
+      const response = await fetch("http://localhost:5000/api/cart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: currentUserId, ...newItemData })
       });
+      if (!response.ok) {
+        const errData = await response.json();
+        console.error("Cart POST failed:", response.status, errData);
+      } else {
+        console.log("Cart POST success");
+        
+        // --- ADD TO CART EMAIL TRIGGER ---
+        if (isAuthenticated && user?.email) {
+          if (!sentCartEmailsRef.current.has(productId)) {
+            sentCartEmailsRef.current.add(productId);
+            try {
+              const qtyStr = quantity || 1;
+              const priceStr = price ? parseFloat(price).toFixed(2) : "0.00";
+              const itemsList = `1. ${product.name} - Quantity: ${qtyStr} - $${(price * quantity).toFixed(2)}`;
+              
+              const emailParams = {
+                order_number: `CART-${Date.now()}`,
+                order_date: new Date().toLocaleString(),
+                total_amount: `$${(price * quantity).toFixed(2)}`,
+                subtotal: `$${(price * quantity).toFixed(2)}`,
+                shipping: "0",
+                tax: "0",
+                discount: "0",
+                items: itemsList,
+                estimated_delivery: "Pending Checkout",
+                payment_method: "N/A",
+                customer_name: user?.name || "Customer",
+                customer_email: user?.email,
+                customer_phone: user?.phone || "N/A",
+                customer_address: "N/A",
+                to_name: user?.name || "Customer",
+                to_email: user?.email,
+                product_name: product.name,
+                price: priceStr,
+                quantity: qtyStr
+              };
+              
+              emailjs.send(
+                "service_mwjv4vc",
+                "template_vxpz22r",
+                emailParams,
+                "CnGqkQdJYAqYv2Cz6"
+              ).catch(e => console.error("EmailJS cart trigger error:", e));
+            } catch (e) {
+              console.error("Failed to construct email payload", e);
+            }
+          }
+        }
+        // ---------------------------------
+      }
+    } catch (err) {
+      console.error("Failed to add to remote cart", err);
+    }
+
+    setCart((prevCart) => {
+      const existingItem = prevCart.find((item) => item.id === product.id);
 
       if (existingItem) {
         return prevCart.map((item) => {
-          if (size === null || !item.size) {
-            if (item.id === product.id) {
-              return { ...item, quantity: item.quantity + quantity };
-            }
-          } else {
-            if (item.id === product.id && item.size === size) {
-              return { ...item, quantity: item.quantity + quantity };
-            }
+          if (item.id === product.id) {
+            return { ...item, quantity: item.quantity + quantity };
           }
           return item;
         });
@@ -68,10 +181,7 @@ export const StoreProvider = ({ children }) => {
           price: price,
           originalPrice: product.originalPrice,
           discount: product.discount,
-          image:
-            product.image ||
-            product.images?.[0] ||
-            "https://via.placeholder.com/400",
+          image: newItemData.product_image,
           category: product.category || "",
           description: product.description || "",
           colors: product.colors || [],
@@ -84,43 +194,54 @@ export const StoreProvider = ({ children }) => {
     });
   };
 
-  const removeFromCart = (productId, size = null) => {
-    setCart((prevCart) =>
-      prevCart.filter((item) => {
-        if (size === null) {
-          return item.id !== productId;
-        }
-        return !(item.id === productId && item.size === size);
-      }),
-    );
+  const removeFromCart = async (productId, size = null) => {
+    try {
+      await fetch("http://localhost:5000/api/cart", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: currentUserId, product_id: productId })
+      });
+    } catch (err) {
+      console.error("Failed to remove from remote cart", err);
+    }
+
+    setCart((prevCart) => prevCart.filter((item) => item.id !== productId));
   };
 
-  const updateQuantity = (productId, size = null, newQuantity) => {
+  const updateQuantity = async (productId, size = null, newQuantity) => {
     if (newQuantity < 1) {
       removeFromCart(productId, size);
     } else {
+      try {
+        await fetch("http://localhost:5000/api/cart", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: currentUserId, product_id: productId, quantity: newQuantity })
+        });
+      } catch (err) {
+        console.error("Failed to update remote cart quantity", err);
+      }
+
       setCart((prevCart) =>
         prevCart.map((item) => {
-          if (size === null) {
-            if (item.id === productId) {
-              return { ...item, quantity: newQuantity };
-            }
-          } else {
-            if (item.id === productId && item.size === size) {
-              return { ...item, quantity: newQuantity };
-            }
+          if (item.id === productId) {
+            return { ...item, quantity: newQuantity };
           }
           return item;
-        }),
+        })
       );
     }
   };
 
-  // ✅ NEW: Clear entire cart
-  const clearCart = () => {
+  const clearCart = async () => {
+    try {
+      await fetch(`http://localhost:5000/api/cart/clear/${currentUserId}`, { method: "DELETE" });
+    } catch (err) {
+      console.error("Failed to clear remote cart", err);
+    }
+    
     setCart([]);
     localStorage.removeItem("cart");
-    // Dispatch custom event for other components to listen
     if (typeof window !== "undefined") {
       window.dispatchEvent(new Event("cartUpdated"));
     }
@@ -140,28 +261,60 @@ export const StoreProvider = ({ children }) => {
     return cart.reduce((count, item) => count + item.quantity, 0);
   };
 
-  // Store full product objects instead of just IDs
-  const addToWishlist = (productOrId) => {
-    if (typeof productOrId === "object") {
-      // Full product object passed
-      const exists = wishlist.some((item) => item.id === productOrId.id);
-      if (!exists) {
-        setWishlist((prev) => [...prev, productOrId]);
+  const addToWishlist = async (productOrId) => {
+    let productObj = productOrId;
+    if (typeof productOrId !== "object") {
+      // If only ID is passed, we try to construct a minimal object or find it if we had a products list
+      // For now, let's assume we need at least the ID
+      productObj = { id: productOrId, name: "Product", image: "" };
+    }
+
+    const productId = productObj.id || productObj._id;
+    let price = productObj.price;
+    if (typeof price === "string") {
+      price = parseFloat(price.replace(/[₹,$\s]/g, ""));
+    }
+
+    const exists = wishlist.some((item) => item.id === productId);
+    if (!exists) {
+      // Instant UI update (Optimistic)
+      setWishlist((prev) => [...prev, { ...productObj, id: productId }]);
+
+      try {
+        const response = await fetch("http://localhost:5000/api/wishlist", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            user_id: currentUserId,
+            product_id: productId,
+            product_name: productObj.name || "Product",
+            product_image: productObj.image || (productObj.images ? productObj.images[0] : "") || "https://via.placeholder.com/400",
+            price: price || 0
+          })
+        });
+        if (!response.ok) {
+           const errData = await response.json();
+           console.error("Wishlist Background Sync Failed:", response.status, errData);
+        } else {
+           console.log("Wishlist Background Sync Success");
+        }
+      } catch (err) {
+        console.error("Wishlist Background Sync Error:", err);
       }
-    } else {
-      // Only an ID passed — skip (can't store without product data)
-      console.warn("addToWishlist: pass the full product object, not just ID");
     }
   };
 
-  // Compare by object's id property
-  const removeFromWishlist = (productId) => {
+  const removeFromWishlist = async (productId) => {
+    try {
+      await fetch(`http://localhost:5000/api/wishlist/${currentUserId}/${productId}`, { method: "DELETE" });
+    } catch (err) {
+      console.error("Failed to remove from remote wishlist", err);
+    }
     setWishlist((prev) => prev.filter((item) => item.id !== productId));
   };
 
   const toggleWishlist = (productOrId) => {
-    const productId =
-      typeof productOrId === "object" ? productOrId.id : productOrId;
+    const productId = typeof productOrId === "object" ? (productOrId.id || productOrId._id) : productOrId;
     if (isInWishlist(productId)) {
       removeFromWishlist(productId);
     } else {
@@ -169,7 +322,6 @@ export const StoreProvider = ({ children }) => {
     }
   };
 
-  // Check by object's id property
   const isInWishlist = (productId) => {
     return wishlist.some((item) => item.id === productId);
   };
@@ -208,7 +360,7 @@ export const StoreProvider = ({ children }) => {
         addToCart,
         removeFromCart,
         updateQuantity,
-        clearCart, // ✅ EXPORTED HERE
+        clearCart,
         getCartTotal,
         getCartCount,
         addToWishlist,
@@ -217,6 +369,7 @@ export const StoreProvider = ({ children }) => {
         isInWishlist,
         performSearch,
         clearSearch,
+        currentUserId, // exported here for access globally
       }}
     >
       {children}

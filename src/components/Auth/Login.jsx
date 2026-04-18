@@ -1,5 +1,5 @@
-// components/Auth/Login.jsx
-import React, { useState, useEffect } from "react";
+// Login.jsx
+import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import {
@@ -9,59 +9,52 @@ import {
   FaEyeSlash,
   FaArrowRight,
   FaUserShield,
+  FaStore,
+  FaUser,
 } from "react-icons/fa";
 
 function Login() {
   const navigate = useNavigate();
   const { login } = useAuth();
-  const [form, setForm] = useState({ email: "", password: "" });
+
+  const [form, setForm] = useState({
+    email: "",
+    password: "",
+  });
+
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [focusedField, setFocusedField] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const loginImages = [
-    "https://images.pexels.com/photos/994234/pexels-photo-994234.jpeg?auto=compress&cs=tinysrgb&w=800&h=1000&fit=crop",
-    "https://images.pexels.com/photos/837140/pexels-photo-837140.jpeg?auto=compress&cs=tinysrgb&w=800&h=1000&fit=crop",
-  ];
+  const fashionImage =
+    "https://images.pexels.com/photos/1462637/pexels-photo-1462637.jpeg?auto=compress&cs=tinysrgb&w=1200&h=1600&fit=crop";
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentImageIndex((prev) => (prev + 1) % loginImages.length);
-    }, 4000);
-    return () => clearInterval(interval);
-  }, [loginImages.length]);
-
-  const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
-    setError("");
-    setSuccess("");
+  // Hardcoded private admin credentials (not visible in UI)
+  const PRIVATE_ADMIN = {
+    email: "admin@nivest.com",
+    password: "admin123",
+    userData: {
+      id: 1,
+      name: "Admin User",
+      email: "admin@nivest.com",
+      role: "admin",
+      isAdmin: true,
+      isSeller: false,
+    },
   };
 
-  // Pre-defined demo accounts
   const demoAccounts = {
-    admin: {
-      email: "admin@nivest.com",
-      password: "admin123",
-      userData: {
-        id: 1,
-        name: "Admin User",
-        email: "admin@nivest.com",
-        isAdmin: true,
-        role: "admin",
-        isSeller: false,
-      },
-    },
     seller: {
       email: "seller@nivest.com",
       password: "seller123",
       userData: {
         id: 2,
-        name: "Seller User",
+        name: "Demo Seller",
         email: "seller@nivest.com",
-        isSeller: true,
         role: "seller",
+        isSeller: true,
         isAdmin: false,
       },
     },
@@ -70,80 +63,113 @@ function Login() {
       password: "customer123",
       userData: {
         id: 3,
-        name: "Customer User",
+        name: "Demo Customer",
         email: "customer@nivest.com",
-        isSeller: false,
         role: "customer",
+        isSeller: false,
         isAdmin: false,
       },
     },
   };
 
-  const handleSubmit = (e) => {
+  const handleChange = (e) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+    setError("");
+    setSuccess("");
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
+
     if (!form.email || !form.password) {
       setError("Please fill in all fields");
       return;
     }
 
-    // Check for demo accounts first
+    setIsLoading(true);
+    setError("");
+    setSuccess("");
+
+    // Check for private admin login first (hardcoded, not in localStorage)
     if (
-      form.email === demoAccounts.admin.email &&
-      form.password === demoAccounts.admin.password
+      form.email === PRIVATE_ADMIN.email &&
+      form.password === PRIVATE_ADMIN.password
     ) {
-      login(demoAccounts.admin.userData);
-      setSuccess("Welcome Admin! Redirecting...");
+      login(PRIVATE_ADMIN.userData);
+      setSuccess(`Welcome ${PRIVATE_ADMIN.userData.name}! Redirecting...`);
       setTimeout(() => navigate("/admin"), 1000);
+      setIsLoading(false);
       return;
     }
 
+    // Demo seller login
     if (
       form.email === demoAccounts.seller.email &&
       form.password === demoAccounts.seller.password
     ) {
       login(demoAccounts.seller.userData);
-      setSuccess("Welcome Seller! Redirecting...");
+      setSuccess(
+        `Welcome ${demoAccounts.seller.userData.name}! Redirecting...`,
+      );
       setTimeout(() => navigate("/seller-dashboard"), 1000);
+      setIsLoading(false);
       return;
     }
 
+    // Demo customer login
     if (
       form.email === demoAccounts.customer.email &&
       form.password === demoAccounts.customer.password
     ) {
       login(demoAccounts.customer.userData);
-      setSuccess("Welcome back! Redirecting...");
+      setSuccess(
+        `Welcome ${demoAccounts.customer.userData.name}! Redirecting...`,
+      );
       setTimeout(() => navigate("/"), 1000);
+      setIsLoading(false);
       return;
     }
 
-    // Check localStorage for existing users
-    const users = JSON.parse(localStorage.getItem("nivest_users") || "[]");
-    const foundUser = users.find(
-      (u) => u.email === form.email && u.password === form.password,
-    );
+    // Backend login for registered users
+    try {
+      const response = await fetch("http://localhost:5000/api/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: form.email,
+          password: form.password,
+        }),
+      });
 
-    if (foundUser) {
-      // Ensure user has proper role fields
-      const userToLogin = {
-        ...foundUser,
-        isAdmin: foundUser.isAdmin || foundUser.role === "admin" || false,
-        isSeller: foundUser.isSeller || foundUser.role === "seller" || false,
-        role: foundUser.role || (foundUser.isSeller ? "seller" : "customer"),
-      };
-      login(userToLogin);
+      const data = await response.json();
 
-      if (userToLogin.isAdmin) {
+      if (!response.ok) {
+        setError(data.message || "Invalid credentials");
+        setIsLoading(false);
+        return;
+      }
+
+      // Login successful
+      login(data.user);
+      setSuccess("Login successful! Redirecting...");
+
+      // Correct redirect logic based on user role
+      if (data.user.role === "admin") {
         setTimeout(() => navigate("/admin"), 1000);
-      } else if (userToLogin.isSeller) {
+      } else if (data.user.role === "seller") {
         setTimeout(() => navigate("/seller-dashboard"), 1000);
       } else {
         setTimeout(() => navigate("/"), 1000);
       }
-      return;
+    } catch (error) {
+      console.error("Login error:", error);
+      setError(
+        "Server connection failed. Please make sure the backend server is running.",
+      );
+      setIsLoading(false);
     }
-
-    setError("Invalid credentials. Use demo accounts or sign up.");
   };
 
   const fillDemoAccount = (type) => {
@@ -152,565 +178,204 @@ function Login() {
       password: demoAccounts[type].password,
     });
     setError("");
+    setSuccess("");
   };
 
   const gold = "#C9A84C";
-  const goldLight = "#F0D878";
-  const goldDark = "#A07830";
-  const goldGrad = `linear-gradient(135deg, ${goldDark} 0%, ${gold} 50%, ${goldLight} 100%)`;
-  const goldGradShine = `linear-gradient(135deg, #8B6520 0%, #C9A84C 30%, #F0D878 55%, #C9A84C 75%, #A07830 100%)`;
-
-  const keyframes = `
-    @keyframes shimmer {
-      0%   { background-position: -200% center; }
-      100% { background-position:  200% center; }
-    }
-    @keyframes pulseGlow {
-      0%, 100% { box-shadow: 0 32px 80px rgba(201,168,76,0.28), 0 4px 24px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.9); }
-      50%       { box-shadow: 0 32px 80px rgba(201,168,76,0.42), 0 4px 24px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.9); }
-    }
-    @keyframes floatBlob {
-      0%, 100% { transform: scale(1) translate(0, 0); }
-      50%       { transform: scale(1.08) translate(12px, -12px); }
-    }
-  `;
 
   const styles = {
     container: {
-      height: "100vh",
-      width: "100vw",
+      minHeight: "100vh",
       display: "flex",
+      background: "#fff",
+    },
+    left: {
+      width: "50%",
+      display: "flex",
+      justifyContent: "center",
       alignItems: "center",
-      justifyContent: "center",
-      background:
-        "linear-gradient(145deg, #fdfaf3 0%, #f7f0e0 45%, #f2e8cc 100%)",
-      position: "relative",
-      overflow: "hidden",
-    },
-    bgCircle1: {
-      position: "absolute",
-      width: "800px",
-      height: "500px",
-      borderRadius: "50%",
-      background:
-        "radial-gradient(circle, rgba(240,216,120,0.30) 0%, rgba(201,168,76,0.12) 45%, transparent 70%)",
-      top: "-150px",
-      left: "-150px",
-      pointerEvents: "none",
-      animation: "floatBlob 8s ease-in-out infinite",
-    },
-    bgCircle2: {
-      position: "absolute",
-      width: "460px",
-      height: "460px",
-      borderRadius: "50%",
-      background:
-        "radial-gradient(circle, rgba(240,216,120,0.22) 0%, rgba(201,168,76,0.08) 50%, transparent 70%)",
-      bottom: "-100px",
-      right: "-100px",
-      pointerEvents: "none",
-      animation: "floatBlob 10s ease-in-out infinite reverse",
-    },
-    bgCircle3: {
-      position: "absolute",
-      width: "300px",
-      height: "300px",
-      borderRadius: "50%",
-      background:
-        "radial-gradient(circle, rgba(255,240,180,0.18) 0%, transparent 70%)",
-      top: "30%",
-      right: "18%",
-      pointerEvents: "none",
-    },
-    wrapper: {
-      display: "flex",
-      width: "min(1800px, 92vw)",
-      height: "min(620px, 88vh)",
-      background: "linear-gradient(160deg, #ffffff 0%, #fdfbf5 100%)",
-      borderRadius: "28px",
-      overflow: "hidden",
-      animation: "pulseGlow 5s ease-in-out infinite",
-      border: "1px solid rgba(240,216,120,0.50)",
-      position: "relative",
-      zIndex: 1,
-    },
-    cardGloss: {
-      position: "absolute",
-      top: 0,
-      left: 0,
-      right: 0,
-      height: "3px",
-      background: goldGradShine,
-      backgroundSize: "200% auto",
-      animation: "shimmer 3s linear infinite",
-      zIndex: 10,
-      borderRadius: "28px 28px 0 0",
-    },
-    leftSection: {
-      width: "480px",
-      minWidth: "420px",
-      padding: "2.2rem 2.4rem",
-      background: "linear-gradient(180deg, #ffffff 0%, #fdfbf6 100%)",
-      display: "flex",
+      padding: "40px",
       flexDirection: "column",
-      justifyContent: "center",
-      position: "relative",
     },
-    leftGloss: {
-      position: "absolute",
-      top: 0,
-      left: 0,
-      right: 0,
-      height: "180px",
-      background:
-        "linear-gradient(180deg, rgba(255,252,240,0.85) 0%, transparent 100%)",
-      pointerEvents: "none",
-      zIndex: 0,
+    right: {
+      width: "50%",
     },
-    logoRow: {
-      textAlign: "center",
-      marginBottom: "0.1rem",
-      position: "relative",
-      zIndex: 1,
-    },
-    logoText: {
-      fontSize: "1.8rem",
-      fontWeight: 800,
-      background: goldGradShine,
-      backgroundSize: "200% auto",
-      WebkitBackgroundClip: "text",
-      backgroundClip: "text",
-      color: "transparent",
-      letterSpacing: "5px",
-      animation: "shimmer 4s linear infinite",
-    },
-    logoTagline: {
-      textAlign: "center",
-      fontSize: "0.6rem",
-      letterSpacing: "2.5px",
-      color: "#c8ae70",
-      marginBottom: "0.1rem",
-      textTransform: "uppercase",
-      position: "relative",
-      zIndex: 1,
+    image: {
+      width: "100%",
+      height: "100vh",
+      objectFit: "cover",
     },
     heading: {
-      textAlign: "center",
-      fontSize: "1.3rem",
-      fontWeight: 700,
-      color: "#1a1410",
-      margin: "0.3rem 0 0.1rem",
-      position: "relative",
-      zIndex: 1,
+      fontSize: "2rem",
+      marginBottom: "10px",
+      color: "#111",
     },
     subText: {
-      textAlign: "center",
-      color: "#b8a47a",
-      fontSize: "0.72rem",
-      marginBottom: "1rem",
+      color: "#777",
+      marginBottom: "25px",
+    },
+    inputWrapper: {
+      width: "100%",
+      maxWidth: "400px",
       position: "relative",
-      zIndex: 1,
-    },
-    goldDivider: {
-      width: "36px",
-      height: "2.5px",
-      background: goldGradShine,
-      backgroundSize: "200% auto",
-      animation: "shimmer 3s linear infinite",
-      margin: "0 auto 1.2rem auto",
-      borderRadius: "2px",
-      position: "relative",
-      zIndex: 1,
-    },
-    errorAlert: {
-      background: "linear-gradient(135deg, #fff8f8 0%, #fff0f0 100%)",
-      borderLeft: "3px solid #e53e3e",
-      color: "#c53030",
-      padding: "0.5rem 0.85rem",
-      borderRadius: "10px",
-      fontSize: "0.72rem",
-      marginBottom: "0.85rem",
-      boxShadow: "0 2px 8px rgba(229,62,62,0.10)",
-      position: "relative",
-      zIndex: 1,
-    },
-    successAlert: {
-      background: "linear-gradient(135deg, #f6fff9 0%, #edfff4 100%)",
-      borderLeft: "3px solid #38a169",
-      color: "#276749",
-      padding: "0.5rem 0.85rem",
-      borderRadius: "10px",
-      fontSize: "0.72rem",
-      marginBottom: "0.85rem",
-      boxShadow: "0 2px 8px rgba(56,161,105,0.10)",
-      position: "relative",
-      zIndex: 1,
-    },
-    demoAccountsContainer: {
-      background: "linear-gradient(135deg, #fdfbf0 0%, #faf5e0 100%)",
-      borderRadius: "12px",
-      padding: "0.75rem",
-      marginBottom: "1rem",
-      border: "1px solid rgba(201,168,76,0.30)",
-      position: "relative",
-      zIndex: 1,
-    },
-    demoTitle: {
-      fontSize: "0.65rem",
-      fontWeight: 700,
-      color: goldDark,
-      textAlign: "center",
-      marginBottom: "0.5rem",
-      textTransform: "uppercase",
-      letterSpacing: "1px",
-    },
-    demoButtons: {
-      display: "flex",
-      gap: "0.5rem",
-      justifyContent: "center",
-    },
-    demoBtn: {
-      background: "transparent",
-      border: `1px solid ${gold}`,
-      color: goldDark,
-      padding: "0.3rem 0.8rem",
-      borderRadius: "20px",
-      fontSize: "0.65rem",
-      fontWeight: 600,
-      cursor: "pointer",
-      transition: "all 0.3s ease",
-    },
-    formGroup: { marginBottom: "1rem", position: "relative", zIndex: 1 },
-    label: {
-      display: "block",
-      fontSize: "0.62rem",
-      fontWeight: 700,
-      textTransform: "uppercase",
-      letterSpacing: "1.2px",
-      color: gold,
-      marginBottom: "0.28rem",
-    },
-    inputWrapper: { position: "relative" },
-    inputIcon: {
-      position: "absolute",
-      left: "0.95rem",
-      top: "50%",
-      transform: "translateY(-50%)",
-      color: focusedField ? gold : "#d4bc88",
-      fontSize: "0.85rem",
-      transition: "color 0.3s ease",
+      marginBottom: "18px",
     },
     input: {
       width: "100%",
-      padding: "0.75rem 1rem 0.75rem 2.6rem",
-      border: `1.5px solid ${focusedField ? gold : "#e8dcc0"}`,
-      borderRadius: "12px",
-      fontSize: "0.85rem",
-      transition: "all 0.3s ease",
-      background: focusedField
-        ? "linear-gradient(135deg, #fffef8 0%, #fefbf0 100%)"
-        : "linear-gradient(135deg, #fdfaf0 0%, #faf6e8 100%)",
-      boxShadow: focusedField
-        ? "0 0 0 3px rgba(201,168,76,0.15), 0 2px 8px rgba(201,168,76,0.12)"
-        : "0 1px 4px rgba(160,120,48,0.06)",
-      boxSizing: "border-box",
+      padding: "14px 45px",
+      borderRadius: "10px",
+      border: `1.5px solid ${focusedField ? gold : "#ddd"}`,
       outline: "none",
-      color: "#1a1410",
+      fontSize: "15px",
+      transition: "all 0.2s ease",
     },
-    passwordToggle: {
+    icon: {
       position: "absolute",
-      right: "0.95rem",
       top: "50%",
+      left: "15px",
       transform: "translateY(-50%)",
+      color: gold,
+    },
+    eyeBtn: {
+      position: "absolute",
+      top: "50%",
+      right: "15px",
+      transform: "translateY(-50%)",
+      border: "none",
       background: "none",
-      border: "none",
-      color: "#c4a55a",
       cursor: "pointer",
-      fontSize: "0.85rem",
+      color: gold,
     },
-    submitBtn: {
+    button: {
       width: "100%",
-      padding: "0.85rem",
+      maxWidth: "400px",
+      padding: "14px",
       border: "none",
-      borderRadius: "12px",
-      fontWeight: 700,
-      fontSize: "0.78rem",
-      textTransform: "uppercase",
-      letterSpacing: "1.5px",
-      background: goldGradShine,
-      backgroundSize: "200% auto",
-      animation: "shimmer 4s linear infinite",
+      borderRadius: "10px",
+      background: gold,
       color: "#fff",
-      transition: "all 0.3s ease",
-      marginTop: "0.5rem",
-      cursor: "pointer",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      gap: "0.5rem",
-      boxShadow:
-        "0 6px 20px rgba(201,168,76,0.52), 0 2px 6px rgba(160,120,48,0.20), inset 0 1px 0 rgba(255,255,255,0.25)",
-      position: "relative",
-      zIndex: 1,
+      fontWeight: "bold",
+      cursor: isLoading ? "not-allowed" : "pointer",
+      marginTop: "10px",
+      opacity: isLoading ? 0.7 : 1,
     },
-    divider: {
+    linkSection: {
+      marginTop: "20px",
       textAlign: "center",
-      margin: "0.8rem 0",
-      color: "#d4c090",
-      fontSize: "0.72rem",
-      position: "relative",
-      zIndex: 1,
     },
-    authLink: { textAlign: "center", position: "relative", zIndex: 1 },
     link: {
       color: gold,
       textDecoration: "none",
-      fontWeight: 700,
-      fontSize: "0.78rem",
+      fontWeight: "600",
+      display: "block",
+      marginTop: "10px",
     },
-    rightSection: {
-      flex: 1,
-      position: "relative",
-      overflow: "hidden",
-      background: "#111",
-    },
-    slidingImage: {
-      position: "absolute",
-      top: 0,
-      left: 0,
-      width: "100%",
-      height: "100%",
-      objectFit: "cover",
-      opacity: 0,
-      transform: "scale(1.08)",
-      transition: "opacity 1.2s ease-in-out, transform 6s ease-in-out",
-      filter: "brightness(1.08) saturate(1.10)",
-    },
-    activeImage: { opacity: 0.88, transform: "scale(1)" },
-    imageOverlay: {
-      position: "absolute",
-      inset: 0,
-      background:
-        "linear-gradient(160deg, rgba(180,140,48,0.30) 0%, rgba(0,0,0,0.48) 100%)",
-      pointerEvents: "none",
-    },
-    imageShine: {
-      position: "absolute",
-      top: 0,
-      left: "-60%",
-      width: "40%",
-      height: "100%",
-      background:
-        "linear-gradient(105deg, transparent 40%, rgba(255,240,180,0.10) 50%, transparent 60%)",
-      animation: "shimmer 6s linear infinite",
-      backgroundSize: "200% 100%",
-      pointerEvents: "none",
-      zIndex: 2,
-    },
-    imageBadge: {
-      position: "absolute",
-      bottom: "1.5rem",
-      left: "1.5rem",
-      right: "1.5rem",
-      background: "rgba(255,255,255,0.10)",
-      border: "1px solid rgba(240,216,120,0.55)",
-      borderRadius: "14px",
-      padding: "1rem 1.2rem",
-      backdropFilter: "blur(10px)",
-      boxShadow:
-        "0 4px 24px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.15)",
-      zIndex: 3,
-    },
-    imageBadgeTitle: {
-      fontSize: "0.7rem",
-      fontWeight: 700,
-      letterSpacing: "2.5px",
-      color: goldLight,
-      marginBottom: "0.3rem",
-      textTransform: "uppercase",
-    },
-    imageBadgeText: {
-      fontSize: "0.72rem",
-      color: "rgba(255,255,255,0.82)",
-      lineHeight: 1.5,
-      margin: 0,
-    },
-    dotIndicator: {
-      position: "absolute",
-      top: "1.2rem",
-      right: "1.2rem",
+    demoButtons: {
       display: "flex",
-      gap: "0.45rem",
-      zIndex: 3,
+      gap: "10px",
+      marginBottom: "20px",
     },
-    dot: {
-      width: "7px",
-      height: "7px",
-      borderRadius: "50%",
-      background: "rgba(255,255,255,0.40)",
+    demoBtn: {
+      padding: "8px 15px",
+      border: `1px solid ${gold}`,
+      borderRadius: "20px",
+      background: "transparent",
       cursor: "pointer",
-      transition: "all 0.3s ease",
-    },
-    activeDot: {
-      width: "22px",
-      borderRadius: "4px",
-      background: goldGrad,
-      boxShadow: "0 0 8px rgba(201,168,76,0.60)",
+      color: gold,
     },
   };
 
   return (
-    <>
-      <style>{keyframes}</style>
-      <div style={styles.container}>
-        <div style={styles.bgCircle1} />
-        <div style={styles.bgCircle2} />
-        <div style={styles.bgCircle3} />
+    <div style={styles.container}>
+      <div style={styles.left}>
+        <FaUserShield size={40} color={gold} />
+        <h2 style={styles.heading}>Login</h2>
+        <p style={styles.subText}>Sign in to continue your journey</p>
 
-        <div style={styles.wrapper}>
-          <div style={styles.cardGloss} />
+        {error && <p style={{ color: "red" }}>{error}</p>}
+        {success && <p style={{ color: "green" }}>{success}</p>}
 
-          <div style={styles.leftSection}>
-            <div style={styles.leftGloss} />
+        <div style={styles.demoButtons}>
+          <button
+            style={styles.demoBtn}
+            onClick={() => fillDemoAccount("customer")}
+          >
+            <FaUser />
+          </button>
+          <button
+            style={styles.demoBtn}
+            onClick={() => fillDemoAccount("seller")}
+          >
+            <FaStore />
+          </button>
+        </div>
 
-            <div style={styles.logoRow}>
-              <FaUserShield
-                style={{
-                  fontSize: "2rem",
-                  color: gold,
-                  marginBottom: "0.5rem",
-                }}
-              />
-            </div>
-            <p style={styles.logoTagline}>Men's &amp; Women's Collection</p>
-            <h2 style={styles.heading}>Welcome Back</h2>
-            <p style={styles.subText}>Sign in to continue your journey</p>
-            <div style={styles.goldDivider} />
-
-            {error && <div style={styles.errorAlert}>{error}</div>}
-            {success && <div style={styles.successAlert}>{success}</div>}
-
-            {/* Demo Accounts Section */}
-            <div style={styles.demoAccountsContainer}>
-              <p style={styles.demoTitle}>✨ Demo Accounts ✨</p>
-              <div style={styles.demoButtons}>
-                <button
-                  style={styles.demoBtn}
-                  onClick={() => fillDemoAccount("admin")}
-                >
-                   Admin
-                </button>
-                <button
-                  style={styles.demoBtn}
-                  onClick={() => fillDemoAccount("seller")}
-                >
-                  Seller
-                </button>
-                <button
-                  style={styles.demoBtn}
-                  onClick={() => fillDemoAccount("customer")}
-                >
-                   Customer
-                </button>
-              </div>
-            </div>
-
-            <form onSubmit={handleSubmit}>
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Email Address</label>
-                <div style={styles.inputWrapper}>
-                  <FaEnvelope style={styles.inputIcon} />
-                  <input
-                    type="email"
-                    name="email"
-                    style={styles.input}
-                    placeholder="hello@example.com"
-                    value={form.email}
-                    onChange={handleChange}
-                    onFocus={() => setFocusedField("email")}
-                    onBlur={() => setFocusedField(null)}
-                  />
-                </div>
-              </div>
-
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Password</label>
-                <div style={styles.inputWrapper}>
-                  <FaLock style={styles.inputIcon} />
-                  <input
-                    type={showPassword ? "text" : "password"}
-                    name="password"
-                    style={styles.input}
-                    placeholder="••••••••"
-                    value={form.password}
-                    onChange={handleChange}
-                    onFocus={() => setFocusedField("password")}
-                    onBlur={() => setFocusedField(null)}
-                  />
-                  <button
-                    type="button"
-                    style={styles.passwordToggle}
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
-                    {showPassword ? (
-                      <FaEyeSlash size={14} />
-                    ) : (
-                      <FaEye size={14} />
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              <button type="submit" style={styles.submitBtn}>
-                Sign In <FaArrowRight size={12} />
-              </button>
-            </form>
-
-            <div style={styles.divider}>— or —</div>
-            <div style={styles.authLink}>
-              <Link to="/signup" style={styles.link}>
-                Don't have an account? <strong>Sign Up</strong>
-              </Link>
-            </div>
+        <form
+          onSubmit={handleSubmit}
+          style={{ width: "100%", maxWidth: "400px" }}
+        >
+          <div style={styles.inputWrapper}>
+            <FaEnvelope style={styles.icon} />
+            <input
+              type="email"
+              name="email"
+              placeholder="Email Address"
+              value={form.email}
+              onChange={handleChange}
+              onFocus={() => setFocusedField("email")}
+              onBlur={() => setFocusedField(null)}
+              style={{
+                ...styles.input,
+                borderColor: focusedField === "email" ? gold : "#ddd",
+              }}
+            />
           </div>
 
-          <div style={styles.rightSection}>
-            {loginImages.map((img, index) => (
-              <img
-                key={index}
-                src={img}
-                alt={`Slide ${index + 1}`}
-                style={{
-                  ...styles.slidingImage,
-                  ...(currentImageIndex === index ? styles.activeImage : {}),
-                }}
-              />
-            ))}
-            <div style={styles.imageOverlay} />
-            <div style={styles.imageShine} />
-            <div style={styles.imageBadge}>
-              <p style={styles.imageBadgeTitle}>NIVEST Fashion</p>
-              <p style={styles.imageBadgeText}>
-                Discover premium men's &amp; women's collections curated just
-                for you
-              </p>
-            </div>
-            <div style={styles.dotIndicator}>
-              {loginImages.map((_, index) => (
-                <div
-                  key={index}
-                  style={{
-                    ...styles.dot,
-                    ...(currentImageIndex === index ? styles.activeDot : {}),
-                  }}
-                  onClick={() => setCurrentImageIndex(index)}
-                />
-              ))}
-            </div>
+          <div style={styles.inputWrapper}>
+            <FaLock style={styles.icon} />
+            <input
+              type={showPassword ? "text" : "password"}
+              name="password"
+              placeholder="Password"
+              value={form.password}
+              onChange={handleChange}
+              onFocus={() => setFocusedField("password")}
+              onBlur={() => setFocusedField(null)}
+              style={{
+                ...styles.input,
+                borderColor: focusedField === "password" ? gold : "#ddd",
+              }}
+            />
+            <button
+              type="button"
+              style={styles.eyeBtn}
+              onClick={() => setShowPassword(!showPassword)}
+            >
+              {showPassword ? <FaEyeSlash /> : <FaEye />}
+            </button>
           </div>
+
+          <button type="submit" style={styles.button} disabled={isLoading}>
+            {isLoading ? "Signing In..." : "Sign In"}{" "}
+            {!isLoading && <FaArrowRight />}
+          </button>
+        </form>
+
+        <div style={styles.linkSection}>
+          <Link to="/signup" style={styles.link}>
+            Customer Registration
+          </Link>
+
+          <Link to="/signup?type=seller" style={styles.link}>
+            Register as Seller →
+          </Link>
         </div>
       </div>
-    </>
+
+      <div style={styles.right}>
+        <img src={fashionImage} alt="fashion" style={styles.image} />
+      </div>
+    </div>
   );
 }
 

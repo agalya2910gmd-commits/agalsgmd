@@ -415,34 +415,34 @@ const CSS = `
 }
 
 .na-body { 
-  padding: 14px; 
+  padding: 10px 12px; 
   flex: 1; 
   display: flex; 
   flex-direction: column; 
 }
 
 .na-cat {
-  font-size: 9px;
-  letter-spacing: 2px;
+  font-size: 8.5px;
+  letter-spacing: 1.5px;
   text-transform: uppercase;
   color: #c4a8e0;
   font-weight: 500;
-  margin-bottom: 6px;
+  margin-bottom: 3px;
 }
 
 .na-name {
   font-family: 'Cormorant Garamond', serif;
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 600;
   color: #1a1a2e;
-  margin-bottom: 8px;
-  line-height: 1.3;
+  margin-bottom: 6px;
+  line-height: 1.25;
 }
 
 .na-colors { 
   display: flex; 
-  gap: 6px; 
-  margin-bottom: 10px; 
+  gap: 5px; 
+  margin-bottom: 8px; 
 }
 .na-dot {
   width: 12px; 
@@ -458,7 +458,7 @@ const CSS = `
   display: flex; 
   align-items: center; 
   gap: 5px; 
-  margin-bottom: 10px; 
+  margin-bottom: 8px; 
 }
 .na-star { 
   color: #c4a8e0; 
@@ -474,7 +474,7 @@ const CSS = `
   display: flex; 
   align-items: baseline; 
   gap: 8px; 
-  margin-bottom: 12px; 
+  margin-bottom: 10px; 
   flex-wrap: wrap; 
 }
 .na-price {
@@ -496,16 +496,16 @@ const CSS = `
 
 .na-cart {
   width: 100%;
-  padding: 10px 0;
+  padding: 8px 0;
   background: transparent;
   border: 1px solid rgba(26,26,46,0.15);
   color: #1a1a2e;
   font-family: 'Outfit', sans-serif;
-  font-size: 10px;
+  font-size: 9px;
   letter-spacing: 2px;
   text-transform: uppercase;
   cursor: pointer;
-  border-radius: 8px;
+  border-radius: 6px;
   transition: all 0.25s;
   margin-top: auto;
 }
@@ -800,9 +800,9 @@ const CSS = `
   font-size:8px; font-weight:600; letter-spacing:1.5px;
   padding:3px 7px; border-radius:4px;
 }
-.pdp-sim-body { padding:12px; }
-.pdp-sim-cat { font-size:9px; letter-spacing:2px; text-transform:uppercase; color:#c4a8e0; font-weight:500; margin-bottom:4px; }
-.pdp-sim-name { font-family:'Cormorant Garamond', serif; font-size:13px; font-weight:600; color:#1a1a2e; margin-bottom:6px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.pdp-sim-body { padding: 10px; }
+.pdp-sim-cat { font-size:8.5px; letter-spacing:1.5px; text-transform:uppercase; color:#c4a8e0; font-weight:500; margin-bottom:2px; }
+.pdp-sim-name { font-family:'Cormorant Garamond', serif; font-size:12px; font-weight:600; color:#1a1a2e; margin-bottom:5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .pdp-sim-price { font-size:14px; font-weight:700; color:#1a1a2e; }
 .pdp-sim-orig { font-size:11px; color:#bbb; text-decoration:line-through; margin-left:6px; }
 `;

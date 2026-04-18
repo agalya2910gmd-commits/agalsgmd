@@ -364,7 +364,7 @@ const Analytics = ({ stats, orders, products, payments }) => {
       <div style={styles.statsGrid}>
         <div style={styles.statCard}>
           <div style={styles.statLabel}>Average Order Value</div>
-          <div style={styles.statValue}>${averageOrderValue}</div>
+          <div style={styles.statValue}>{averageOrderValue}</div>
         </div>
         <div style={styles.statCard}>
           <div style={styles.statLabel}>Conversion Rate</div>
@@ -565,7 +565,7 @@ const Analytics = ({ stats, orders, products, payments }) => {
                 <tr key={order.id}>
                   <td style={styles.tableCell}>#{order.id}</td>
                   <td style={styles.tableCell}>{order.customer}</td>
-                  <td style={styles.tableCell}>${order.total}</td>
+                  <td style={styles.tableCell}>{order.total}</td>
                   <td style={styles.tableCell}>
                     <span
                       style={{

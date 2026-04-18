@@ -1,5 +1,6 @@
 // components/ProductListing.js
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { Container, Row, Col } from "react-bootstrap";
 import {
   FaHeart,
@@ -498,11 +499,12 @@ const products = [
 
 const parsePrice = (s) => parseFloat(s.replace(/[₹,]/g, ""));
 
+// ── UPDATED: Gold & Black tag styles ──
 const tagStyles = {
-  "NEW IN": { bg: "#1a1a2e", color: "#a8c4e0" },
-  TRENDING: { bg: "#2a1a0e", color: "#e8c97e" },
-  BESTSELLER: { bg: "#0e2010", color: "#6fcf97" },
-  HOT: { bg: "#2a0e0e", color: "#e87e7e" },
+  "NEW IN": { bg: "#B5975A", color: "#0F0F0F" },
+  TRENDING: { bg: "#0F0F0F", color: "#B5975A" },
+  BESTSELLER: { bg: "#B5975A", color: "#0F0F0F" },
+  HOT: { bg: "#0F0F0F", color: "#D4AF6A" },
 };
 
 /* ═══════════════════════════════════════════ CSS ══════════════════════════════════════════ */
@@ -526,36 +528,39 @@ const css = `
   .pl-shop-btn{display:inline-flex;align-items:center;gap:10px;padding:13px 32px;background:var(--dark);color:#fff;font-family:'Jost',sans-serif;font-size:11px;letter-spacing:3px;text-transform:uppercase;border:none;cursor:pointer;transition:background .3s}
   .pl-shop-btn:hover{background:var(--gold)}
   .pl-card{position:relative;border-radius:10px;overflow:hidden;background:linear-gradient(to bottom,#0d0e0e,#f0f2f3);height:100%;display:flex;flex-direction:column;cursor:pointer;z-index:0;transition:transform .35s ease,box-shadow .35s ease}
-  .pl-card:before{content:'';position:absolute;z-index:-1;top:-16px;right:-16px;background:#e8c97e;height:32px;width:32px;border-radius:50%;transform:scale(1);transform-origin:50% 50%;transition:transform .35s ease-out}
+  .pl-card:before{content:'';position:absolute;z-index:-1;top:-16px;right:-16px;background:#B5975A;height:32px;width:32px;border-radius:50%;transform:scale(1);transform-origin:50% 50%;transition:transform .35s ease-out}
   .pl-card:hover:before{transform:scale(28)}
   .pl-card:hover .pl-body{background:transparent}
   .pl-card:hover .pl-name,.pl-card:hover .pl-cat{color:#070707}
-  .pl-card:hover .pl-price{color:#fff}
-  .pl-card:hover .pl-star{color:#ffd966}
+  .pl-card:hover .pl-price{color:#0a0909}
+  .pl-card:hover .pl-star{color:#B5975A}
   .pl-card:hover .pl-rev,.pl-card:hover .pl-disc{color:rgba(10,10,10,.7)}
-  .pl-card:hover .pl-cart{border-color:#0a0909;color:#fff}
+  .pl-card:hover .pl-cart{border-color:#0a0909;color:#0a0909;background:rgba(0,0,0,0.06)}
   .pl-img-wrap{position:relative;overflow:hidden;aspect-ratio:4/3;background:#f7f4f0;flex-shrink:0;z-index:1}
   .pl-img{width:100%;height:100%;object-fit:cover;transition:transform .6s ease}
   .pl-card:hover .pl-img{transform:scale(1.05)}
-  .pl-tag{position:absolute;top:10px;left:10px;font-size:8px;font-weight:600;letter-spacing:2px;padding:3px 8px;border-radius:4px;font-family:'Jost',sans-serif;z-index:2}
-  .pl-wishlist{position:absolute;top:8px;right:8px;width:30px;height:30px;background:rgba(12,11,11,.95);border:none;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .2s,transform .2s;z-index:2}
-  .pl-wishlist:hover{transform:scale(1.15);background:#fff}
+
+  /* ── UPDATED tag styles: Gold bg + Black text OR Black bg + Gold text ── */
+  .pl-tag{position:absolute;top:10px;left:10px;font-size:8px;font-weight:700;letter-spacing:2px;padding:4px 9px;border-radius:4px;font-family:'Jost',sans-serif;z-index:2;text-transform:uppercase}
+
+  .pl-wishlist{position:absolute;top:8px;right:8px;width:30px;height:30px;background:rgba(12,11,11,.85);border:none;border-radius:50%;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .2s,transform .2s;z-index:2}
+  .pl-wishlist:hover{transform:scale(1.15);background:var(--dark)}
   .go-corner{display:flex;align-items:center;justify-content:center;position:absolute;width:2em;height:2em;top:0;right:0;border-radius:0 4px 0 32px;z-index:2;overflow:hidden}
   .go-arrow{margin-top:-4px;margin-right:-4px;color:#fff;font-size:14px}
-  .pl-body{padding:14px 16px 16px;flex:1;display:flex;flex-direction:column;background:#f2f8f9;transition:background .35s ease-out;position:relative;z-index:1}
-  .pl-cat{font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:var(--gold);font-weight:500;margin-bottom:3px;transition:color .2s}
-  .pl-name{font-family:'Playfair Display',serif;font-size:13px;font-weight:600;color:var(--dark);margin-bottom:7px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:color .2s}
-  .pl-colors{display:flex;gap:5px;margin-bottom:7px}
+  .pl-body{padding:10px 12px 12px;flex:1;display:flex;flex-direction:column;background:#f2f8f9;transition:background .35s ease-out;position:relative;z-index:1}
+  .pl-cat{font-size:8.5px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:500;margin-bottom:2px;transition:color .2s}
+  .pl-name{font-family:'Playfair Display',serif;font-size:12px;font-weight:600;color:var(--dark);margin-bottom:5px;line-height:1.2;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;transition:color .2s}
+  .pl-colors{display:flex;gap:5px;margin-bottom:5px}
   .pl-dot{width:10px;height:10px;border-radius:50%;border:1.5px solid rgba(0,0,0,.12);cursor:pointer;transition:transform .2s}
   .pl-dot:hover{transform:scale(1.3)}
-  .pl-rating{display:flex;align-items:center;gap:4px;margin-bottom:8px}
+  .pl-rating{display:flex;align-items:center;gap:4px;margin-bottom:6px}
   .pl-star{color:var(--gold);font-size:10px;transition:color .2s}
   .pl-rev{font-size:10px;color:#aaa;transition:color .2s}
-  .pl-prices{display:flex;align-items:baseline;gap:6px;margin-bottom:10px;flex-wrap:wrap}
+  .pl-prices{display:flex;align-items:baseline;gap:6px;margin-bottom:8px;flex-wrap:wrap}
   .pl-price{font-family:'Playfair Display',serif;font-size:15px;font-weight:700;color:var(--dark);transition:color .2s}
   .pl-orig{font-size:11px;color:#bbb;text-decoration:line-through}
   .pl-disc{font-size:10px;color:var(--success);font-weight:600;letter-spacing:.5px;transition:color .2s}
-  .pl-cart{width:100%;padding:8px 0;background:transparent;border:1px solid var(--dark);color:var(--dark);font-family:'Jost',sans-serif;font-size:10px;letter-spacing:2.5px;text-transform:uppercase;cursor:pointer;border-radius:4px;transition:background .25s,color .25s,border-color .25s;margin-top:auto;display:flex;align-items:center;justify-content:center;gap:6px}
+  .pl-cart{width:100%;padding:6px 0;background:transparent;border:1px solid var(--dark);color:var(--dark);font-family:'Jost',sans-serif;font-size:9px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;border-radius:4px;transition:background .25s,color .25s,border-color .25s;margin-top:auto;display:flex;align-items:center;justify-content:center;gap:6px}
   .pl-cart:hover{background:var(--dark);color:#F8F5F0}
   .pl-cart.added{background:var(--gold);color:#fff;border-color:var(--gold)}
   .heart-active{color:var(--danger)}
@@ -596,11 +601,6 @@ const css = `
   .pdp-crumb-link{color:var(--dark);font-weight:500;cursor:pointer}
   .pdp-crumb-sep{color:#ccc}
 
-  /* ═══ HERO — exact match to reference image 2 ═══
-     Layout: [thumb col 68px] [main img flex:1]  |  [info col ~45%]
-     No scrollbar, no sticky tricks — just align-items:start on grid so
-     left column's natural height equals the image, right column flows freely.
-  */
   .pdp-hero{
     display:grid;
     grid-template-columns:1fr 1fr;
@@ -612,7 +612,6 @@ const css = `
   }
   @media(max-width:860px){.pdp-hero{grid-template-columns:1fr;gap:20px;padding:14px 14px 0}}
 
-  /* gallery column — sticky so image stays while info scrolls */
   .pdp-gcol{
     position:sticky;
     top:56px;
@@ -622,7 +621,6 @@ const css = `
   }
   @media(max-width:860px){.pdp-gcol{position:static}}
 
-  /* thumbs strip — left of main image, exactly like reference */
   .pdp-thumbs{
     display:flex;flex-direction:column;gap:8px;
     width:66px;flex-shrink:0;
@@ -636,7 +634,6 @@ const css = `
   .pdp-thumb:hover:not(.active){border-color:#ccc;transform:scale(1.04)}
   .pdp-thumb img{width:100%;height:100%;object-fit:cover;display:block}
 
-  /* main image wrapper */
   .pdp-mwrap-col{flex:1;position:relative}
   .pdp-mwrap{
     width:100%;aspect-ratio:3/4;
@@ -646,7 +643,10 @@ const css = `
     box-shadow:0 4px 18px rgba(0,0,0,.08);
   }
   .pdp-mimg{width:100%;height:100%;object-fit:cover;object-position:center top;display:block;pointer-events:none}
-  .pdp-tbadge{position:absolute;top:12px;left:12px;font-size:9px;font-weight:600;letter-spacing:2px;padding:4px 10px;border-radius:5px;z-index:2;font-family:'Jost',sans-serif;pointer-events:none}
+
+  /* ── UPDATED: PDP tag badge — gold/black ── */
+  .pdp-tbadge{position:absolute;top:12px;left:12px;font-size:9px;font-weight:700;letter-spacing:2px;padding:4px 10px;border-radius:5px;z-index:2;font-family:'Jost',sans-serif;pointer-events:none;text-transform:uppercase}
+
   .zoom-lens{position:absolute;top:0;left:0;width:118px;height:118px;border:2px solid var(--gold);background:rgba(181,151,90,.07);border-radius:4px;pointer-events:none;z-index:15;opacity:0;visibility:hidden;transition:opacity .12s;will-change:transform}
   .zoom-lens.active{opacity:1;visibility:visible}
   .zoom-preview{position:absolute;top:0;left:calc(100% + 10px);width:270px;height:100%;overflow:hidden;border-radius:10px;box-shadow:0 10px 26px rgba(0,0,0,.18);z-index:20;pointer-events:none;border:1px solid var(--border);background-repeat:no-repeat;opacity:0;visibility:hidden;transition:opacity .14s;will-change:background-position}
@@ -657,46 +657,44 @@ const css = `
   .pdp-icol{padding-top:0}
   @media(max-width:860px){.pdp-icol{padding-top:0}}
 
-  /* all info items — compact spacing matching reference */
-  .pdp-brand {font-size:10px;letter-spacing:3.5px;text-transform:uppercase;color:var(--mid);font-weight:500;margin-bottom:4px}
-  .pdp-pname {font-family:'Playfair Display',serif;font-size:clamp(20px,2vw,26px);font-weight:700;color:var(--dark);line-height:1.2;margin-bottom:8px}
-  .pdp-rrow  {display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:10px}
+  .pdp-brand {font-size:10px;letter-spacing:3.5px;text-transform:uppercase;color:var(--mid);font-weight:500;margin-bottom:4px;text-align:left}
+  .pdp-pname {font-family:'Playfair Display',serif;font-size:clamp(20px,2vw,26px);font-weight:700;color:var(--dark);line-height:1.2;margin-bottom:8px;text-align:left}
+  .pdp-rrow  {display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:10px;justify-content:flex-start}
   .pdp-rstars{display:flex;gap:2px}
   .pdp-rnum  {font-size:13px;font-weight:600;color:var(--dark)}
   .pdp-rcnt  {font-size:12px;color:var(--mid)}
   .pdp-rsep  {color:#ddd}
   .pdp-hr    {border:none;border-top:1px solid var(--border);margin:10px 0}
 
-  .pdp-prices{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:2px}
+  .pdp-prices{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:2px;justify-content:flex-start}
   .pdp-price {font-family:'Playfair Display',serif;font-size:26px;font-weight:700;color:var(--dark)}
   .pdp-oprice{font-size:15px;color:#bbb;text-decoration:line-through}
-  .pdp-dbadge{font-size:11px;font-weight:700;letter-spacing:.8px;color:#fff;background:var(--danger);padding:3px 8px;border-radius:4px}
-  .pdp-save  {font-size:11px;color:var(--success);margin-bottom:8px}
+  .pdp-dbadge{font-size:11px;font-weight:700;letter-spacing:.8px;color:#0F0F0F;background:var(--gold);padding:3px 8px;border-radius:4px}
+  .pdp-save  {font-size:11px;color:var(--success);margin-bottom:8px;text-align:left}
   .pdp-stock {display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500;margin-bottom:10px;color:var(--success)}
   .pdp-sdot  {width:7px;height:7px;border-radius:50%;background:var(--success)}
 
-  .pdp-desc  {font-size:12.5px;color:#555;line-height:1.75;margin-bottom:12px}
+  .pdp-desc  {font-size:12.5px;color:#555;line-height:1.75;margin-bottom:12px;text-align:left}
 
-  .pdp-lbl   {font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:var(--mid);font-weight:600;margin-bottom:8px}
+  .pdp-lbl   {font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:var(--mid);font-weight:600;margin-bottom:8px;text-align:left}
 
-  .pdp-clist {display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px}
+  .pdp-clist {display:flex;gap:10px;flex-wrap:wrap;margin-bottom:14px;justify-content:flex-start}
   .pdp-copt  {display:flex;flex-direction:column;align-items:center;gap:4px;border:none;background:none;cursor:pointer;padding:0}
   .pdp-csw   {width:26px;height:26px;border-radius:50%;border:2px solid transparent;outline:2px solid transparent;transition:all .18s;box-shadow:0 1px 4px rgba(0,0,0,.14)}
   .pdp-copt.active .pdp-csw{outline:2px solid var(--gold);outline-offset:2px}
   .pdp-cname {font-size:8px;color:var(--mid)}
 
-  .pdp-slist {display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px}
+  .pdp-slist {display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px;justify-content:flex-start}
   .pdp-sbtn  {min-width:50px;padding:7px 11px;border:1.5px solid var(--border);border-radius:7px;background:transparent;font-family:'Jost',sans-serif;font-size:12px;font-weight:500;color:var(--dark);cursor:pointer;transition:all .18s;text-align:center}
-  .pdp-sbtn:hover{border-color:var(--dark)}
+  .pdp-sbtn:hover{border-color:var(--gold)}
   .pdp-sbtn.active{background:var(--dark);color:#fff;border-color:var(--dark)}
 
-  .pdp-qrow  {display:flex;align-items:center;gap:12px;margin-bottom:14px}
+  .pdp-qrow  {display:flex;align-items:center;gap:12px;margin-bottom:14px;justify-content:flex-start}
   .pdp-qty   {display:flex;align-items:center;border:1.5px solid var(--border);border-radius:8px;overflow:hidden}
   .pdp-qbtn  {width:36px;height:38px;border:none;background:#f9f9f9;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--dark);transition:background .18s}
   .pdp-qbtn:hover{background:var(--gold);color:#fff}
   .pdp-qnum  {width:42px;text-align:center;font-size:14px;font-weight:600;color:var(--dark)}
 
-  /* Buttons — matches reference: dark cart + teal/green buy */
   .pdp-brow  {display:flex;gap:10px;margin-bottom:14px}
   .pdp-bcart {
     flex:1;padding:13px 16px;
@@ -705,16 +703,17 @@ const css = `
     cursor:pointer;transition:background .25s,transform .15s;
     display:flex;align-items:center;justify-content:center;gap:8px;
   }
-  .pdp-bcart:hover{background:#222;transform:translateY(-1px)}
-  .pdp-bcart.added{background:var(--gold)}
+  .pdp-bcart:hover{background:#333;transform:translateY(-1px)}
+  .pdp-bcart.added{background:var(--gold);color:#0F0F0F}
   .pdp-bbuy  {
     flex:1;padding:13px 16px;
-    background:#1a6b3a;color:#fff;border:none;border-radius:8px;
+    background:var(--gold);color:#0F0F0F;border:none;border-radius:8px;
     font-family:'Jost',sans-serif;font-size:11px;letter-spacing:2px;text-transform:uppercase;
     cursor:pointer;transition:background .25s,transform .15s;
     display:flex;align-items:center;justify-content:center;gap:8px;
+    font-weight:700;
   }
-  .pdp-bbuy:hover{background:#145430;transform:translateY(-1px)}
+  .pdp-bbuy:hover{background:#c9a96a;transform:translateY(-1px)}
 
   /* trust */
   .pdp-trust {display:flex;gap:10px;flex-wrap:wrap;padding:10px 0;border-top:1px solid var(--border);border-bottom:1px solid var(--border)}
@@ -725,16 +724,17 @@ const css = `
   .pdp-below{max-width:1200px;margin:0 auto;padding:44px 28px 80px}
   @media(max-width:576px){.pdp-below{padding:32px 14px 60px}}
 
-  .pdp-sey  {font-size:10px;letter-spacing:5px;text-transform:uppercase;color:var(--gold);font-weight:600;margin-bottom:5px}
-  .pdp-sh   {font-family:'Playfair Display',serif;font-size:clamp(20px,2.6vw,28px);font-weight:700;color:var(--dark);margin-bottom:22px}
+  /* ── UPDATED: section headings left-aligned ── */
+  .pdp-sey  {font-size:10px;letter-spacing:5px;text-transform:uppercase;color:var(--gold);font-weight:600;margin-bottom:5px;text-align:left}
+  .pdp-sh   {font-family:'Playfair Display',serif;font-size:clamp(20px,2.6vw,28px);font-weight:700;color:var(--dark);margin-bottom:22px;text-align:left}
   .pdp-sh em{font-style:italic;color:var(--gold)}
   .pdp-sdiv {border:none;border-top:1px solid var(--border);margin:42px 0 34px}
 
   /* rating summary */
   .pdp-rsum {display:flex;align-items:center;gap:28px;flex-wrap:wrap;margin-bottom:22px}
-  .pdp-bigr {text-align:center;min-width:72px}
+  .pdp-bigr {text-align:left;min-width:72px}
   .pdp-bnum {font-family:'Playfair Display',serif;font-size:46px;font-weight:700;color:var(--dark);line-height:1}
-  .pdp-bstars{display:flex;justify-content:center;gap:3px;margin:5px 0}
+  .pdp-bstars{display:flex;justify-content:flex-start;gap:3px;margin:5px 0}
   .pdp-bcnt {font-size:11px;color:var(--mid)}
   .pdp-bars {flex:1}
   .pdp-br   {display:flex;align-items:center;gap:10px;margin-bottom:6px}
@@ -747,13 +747,13 @@ const css = `
   .pdp-rcard{padding:18px 0;border-bottom:1px solid var(--border)}
   .pdp-rcard:last-child{border-bottom:none}
   .pdp-rhead{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:7px}
-  .pdp-rname{font-weight:600;font-size:13px;color:var(--dark);margin-bottom:3px}
+  .pdp-rname{font-weight:600;font-size:13px;color:var(--dark);margin-bottom:3px;text-align:left}
   .pdp-rmeta{display:flex;align-items:center;gap:8px}
   .pdp-rstars2{display:flex;gap:2px}
   .pdp-verified{font-size:9px;letter-spacing:1px;color:var(--success);font-weight:600}
   .pdp-rdate{font-size:11px;color:#bbb;display:flex;align-items:center;gap:4px}
-  .pdp-rtitle{font-weight:600;font-size:13px;color:var(--dark);margin-bottom:4px}
-  .pdp-rbody{font-size:12.5px;color:#555;line-height:1.7}
+  .pdp-rtitle{font-weight:600;font-size:13px;color:var(--dark);margin-bottom:4px;text-align:left}
+  .pdp-rbody{font-size:12.5px;color:#555;line-height:1.7;text-align:left}
   .pdp-helpful{margin-top:9px;background:none;border:none;color:var(--gold);cursor:pointer;font-size:11px;display:flex;align-items:center;gap:5px;font-family:'Jost',sans-serif;padding:0;transition:transform .18s}
   .pdp-helpful:hover{transform:translateX(3px)}
 
@@ -768,17 +768,58 @@ const css = `
   .pdp-pc:hover .pdp-pimg{transform:scale(1.07)}
   .pdp-povl {position:absolute;inset:0;background:rgba(15,15,15,.52);display:flex;align-items:center;justify-content:center;opacity:0;transition:opacity .26s}
   .pdp-pc:hover .pdp-povl{opacity:1}
-  .pdp-pabtn{padding:7px 13px;background:#fff;color:var(--dark);border:none;border-radius:6px;font-family:'Jost',sans-serif;font-size:10px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;display:flex;align-items:center;gap:5px;transition:background .2s}
-  .pdp-pabtn:hover{background:var(--gold);color:#fff}
-  .pdp-pbadge{position:absolute;top:8px;left:8px;z-index:1;font-size:8px;font-weight:600;letter-spacing:1.5px;padding:3px 7px;border-radius:4px;font-family:'Jost',sans-serif}
-  .pdp-rvbadge{position:absolute;top:8px;right:8px;z-index:1;background:rgba(0,0,0,.6);color:#fff;font-size:8px;letter-spacing:1px;padding:3px 7px;border-radius:10px;font-family:'Jost',sans-serif;display:flex;align-items:center;gap:4px}
-  .pdp-pbody{padding:10px 12px;flex:1;display:flex;flex-direction:column}
-  .pdp-pcat {font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--gold);font-weight:500;margin-bottom:3px}
-  .pdp-pnam {font-family:'Playfair Display',serif;font-size:13px;font-weight:600;color:var(--dark);margin-bottom:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .pdp-ppr  {display:flex;align-items:baseline;gap:5px}
+  .pdp-pabtn{padding:7px 13px;background:var(--gold);color:#0F0F0F;border:none;border-radius:6px;font-family:'Jost',sans-serif;font-size:10px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;display:flex;align-items:center;gap:5px;transition:background .2s;font-weight:700}
+  .pdp-pabtn:hover{background:#fff;color:var(--dark)}
+
+  /* ── UPDATED: grid card badges — gold/black ── */
+  .pdp-pbadge{position:absolute;top:8px;left:8px;z-index:1;font-size:8px;font-weight:700;letter-spacing:1.5px;padding:3px 7px;border-radius:4px;font-family:'Jost',sans-serif;text-transform:uppercase}
+  .pdp-rvbadge{position:absolute;top:8px;right:8px;z-index:1;background:rgba(0,0,0,.75);color:var(--gold);font-size:8px;letter-spacing:1px;padding:3px 7px;border-radius:10px;font-family:'Jost',sans-serif;display:flex;align-items:center;gap:4px}
+  .pdp-pbody{padding:8px 10px;flex:1;display:flex;flex-direction:column}
+  .pdp-pcat {font-size:8.5px;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);font-weight:500;margin-bottom:2px;text-align:left}
+  .pdp-pnam {font-family:'Playfair Display',serif;font-size:12px;font-weight:600;color:var(--dark);margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:left}
+  .pdp-ppr  {display:flex;align-items:baseline;gap:4px;justify-content:flex-start}
   .pdp-pp   {font-family:'Playfair Display',serif;font-size:13px;font-weight:700;color:var(--dark)}
   .pdp-po   {font-size:10px;color:#bbb;text-decoration:line-through}
   .pdp-pd   {font-size:9px;color:var(--success);font-weight:600}
+
+  /* ── Enhanced Info Sections ── */
+  .pdp-info-section{margin-bottom:26px}
+  .pdp-section-heading{font-size:12px;font-weight:700;color:var(--dark);margin-bottom:13px;padding-bottom:9px;border-bottom:2px solid var(--border);text-align:left;display:flex;align-items:center;gap:7px;font-family:'Jost',sans-serif;letter-spacing:.5px;text-transform:uppercase}
+
+  .pdp-hl-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));gap:10px}
+  .pdp-hl-card{background:var(--light);border:1px solid var(--border);border-radius:9px;padding:11px 13px;display:flex;flex-direction:column;gap:3px}
+  .pdp-hl-label{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mid);font-weight:600}
+  .pdp-hl-value{font-size:13px;font-weight:600;color:var(--dark)}
+
+  .pdp-about-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px}
+  .pdp-about-item{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:#444;line-height:1.65;text-align:left}
+  .pdp-about-dot{width:6px;height:6px;border-radius:50%;background:var(--gold);flex-shrink:0;margin-top:7px}
+
+  .pdp-dtable{width:100%;border-collapse:collapse}
+  .pdp-dtable tr{border-bottom:1px solid var(--border)}
+  .pdp-dtable tr:last-child{border-bottom:none}
+  .pdp-dtable td{padding:9px 4px;font-size:13px;text-align:left;vertical-align:top}
+  .pdp-dtable td:first-child{color:var(--mid);font-weight:600;white-space:nowrap;padding-right:20px;min-width:150px}
+  .pdp-dtable td:last-child{color:var(--dark)}
+
+  .pdp-style-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 20px}
+  .pdp-style-item{padding:8px 0;border-bottom:1px solid var(--border)}
+  .pdp-style-label{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mid);font-weight:600;margin-bottom:2px}
+  .pdp-style-value{font-size:13px;color:var(--dark);font-weight:500}
+
+  .pdp-measure-row{display:flex;gap:14px;flex-wrap:wrap}
+  .pdp-measure-item{background:var(--light);border:1px solid var(--border);border-radius:9px;padding:13px 17px;flex:1;min-width:130px}
+  .pdp-measure-label{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mid);font-weight:600;margin-bottom:3px}
+  .pdp-measure-value{font-size:14px;font-weight:700;color:var(--dark)}
+
+  .pdp-offer-band{background:linear-gradient(135deg,#f0fff4,#e8f5e9);border:1px solid #c8e6c9;border-radius:9px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .pdp-offer-pill{background:#27AE60;color:#fff;font-size:10px;font-weight:700;letter-spacing:.6px;padding:3px 9px;border-radius:20px;white-space:nowrap}
+  .pdp-offer-text{font-size:12px;color:#1B5E20;font-weight:500}
+
+  @media(max-width:576px){
+    .pdp-hl-grid{grid-template-columns:repeat(2,1fr)}
+    .pdp-style-grid{grid-template-columns:1fr}
+  }
 `;
 
 /* ═══════════════════════════════ DetailPage ═══════════════════════════════ */
@@ -792,6 +833,7 @@ const DetailPage = ({
   onProductClick,
   recentlyViewed,
 }) => {
+  const navigate = useNavigate();
   const [mainImg, setMainImg] = useState(0);
   const [selColor, setSelColor] = useState(0);
   const [selSize, setSelSize] = useState(null);
@@ -805,7 +847,7 @@ const DetailPage = ({
   const activeRef = useRef(false);
   const overlayRef = useRef(null);
 
-  const tagSt = tagStyles[product.tag] || { bg: "#111", color: "#fdfbfb" };
+  const tagSt = tagStyles[product.tag] || { bg: "#B5975A", color: "#0F0F0F" };
   const isWish = isInWishlist(product.id);
   const saving = parsePrice(product.originalPrice) - parsePrice(product.price);
 
@@ -838,6 +880,11 @@ const DetailPage = ({
     setCartAdded(true);
     setTimeout(() => setCartAdded(false), 1600);
   };
+
+  const handleBuyNow = () => {
+    onAddToCart(product, qty, false);
+    navigate("/checkout");
+  };
   const handlePClick = (p) => {
     onProductClick(p);
     setMainImg(0);
@@ -868,10 +915,9 @@ const DetailPage = ({
     ll = Math.min(Math.max(ll, 0), r.width - lw);
     lt = Math.min(Math.max(lt, 0), r.height - lh);
     lensRef.current.style.transform = `translate3d(${ll}px,${lt}px,0)`;
-    const z = 3;
-    const bx = Math.min(Math.max(rx * 100 * z, 0), z * 100 - 100);
-    const by = Math.min(Math.max(ry * 100 * z, 0), z * 100 - 100);
-    previewRef.current.style.backgroundPosition = `${bx}% ${by}%`;
+    // Map cursor position (0-1) directly to background-position (0%-100%)
+    // so the zoomed preview shows exactly what is under the cursor
+    previewRef.current.style.backgroundPosition = `${rx * 100}% ${ry * 100}%`;
   };
   const onMove = (e) => {
     if (!activeRef.current) return;
@@ -940,7 +986,6 @@ const DetailPage = ({
       <div className="pdp-hero">
         {/* Left: thumbnails + main image (sticky) */}
         <div className="pdp-gcol">
-          {/* Thumbs on the left — exactly like reference image 2 */}
           <div className="pdp-thumbs">
             {product.images.map((img, i) => (
               <div
@@ -1002,6 +1047,12 @@ const DetailPage = ({
             <span className="pdp-dbadge">{product.discount}</span>
           </div>
           <p className="pdp-save">You save ₹{saving.toLocaleString("en-IN")}</p>
+          {product.discount && saving > 0 && (
+            <div className="pdp-offer-band">
+              <span className="pdp-offer-pill">{product.discount}</span>
+              <span className="pdp-offer-text">Limited time offer — save ₹{saving.toLocaleString("en-IN")} on this item</span>
+            </div>
+          )}
           <div className="pdp-stock">
             <span className="pdp-sdot" /> In Stock
           </div>
@@ -1018,7 +1069,12 @@ const DetailPage = ({
               <button
                 key={i}
                 className={`pdp-copt ${selColor === i ? "active" : ""}`}
-                onClick={() => setSelColor(i)}
+                onClick={() => {
+                  setSelColor(i);
+                  if (product.colorImages && product.colorImages[i] !== undefined) {
+                    setMainImg(product.colorImages[i]);
+                  }
+                }}
               >
                 <div className="pdp-csw" style={{ backgroundColor: c }} />
                 <span className="pdp-cname">{product.colorNames[i]}</span>
@@ -1066,7 +1122,7 @@ const DetailPage = ({
               <FaShoppingBag size={11} />{" "}
               {cartAdded ? "Added ✓" : "Add to Cart"}
             </button>
-            <button className="pdp-bbuy">
+            <button className="pdp-bbuy" onClick={handleBuyNow}>
               <FaBolt size={11} /> Buy Now
             </button>
           </div>
@@ -1089,6 +1145,128 @@ const DetailPage = ({
 
       {/* ═══ BELOW: Reviews → Similar → Recently Viewed ═══ */}
       <div className="pdp-below">
+
+        {/* ══ TOP HIGHLIGHTS ══ */}
+        {(() => {
+          const hlItems = [
+            { label: 'Material', value: product.material },
+            { label: 'Brand', value: product.brand },
+            { label: 'Care', value: product.care },
+            { label: 'Collection', value: product.collection },
+            { label: 'Metal Type', value: product.metalType },
+            { label: 'Country of Origin', value: product.country },
+          ].filter(h => h.value);
+          return hlItems.length > 0 ? (
+            <div className="pdp-info-section">
+              <div className="pdp-section-heading">🏷️ Top Highlights</div>
+              <div className="pdp-hl-grid">
+                {hlItems.map((h, i) => (
+                  <div key={i} className="pdp-hl-card">
+                    <div className="pdp-hl-label">{h.label}</div>
+                    <div className="pdp-hl-value">{h.value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null;
+        })()}
+
+        {/* ══ ABOUT THIS ITEM ══ */}
+        {Array.isArray(product.highlights) && product.highlights.length > 0 && (
+          <div className="pdp-info-section">
+            <div className="pdp-section-heading">📋 About This Item</div>
+            <ul className="pdp-about-list">
+              {product.highlights.map((h, i) => (
+                <li key={i} className="pdp-about-item">
+                  <span className="pdp-about-dot" />
+                  {h}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {/* ══ PRODUCT DETAILS ══ */}
+        {(() => {
+          const dtRows = [
+            ['Material', product.material],
+            ['Care Instructions', product.care],
+            ['Metal Type', product.metalType],
+            ['Metal Stamp', product.metalStamp],
+            ['Country of Origin', product.country],
+            ['Manufacturer', product.manufacturer || product.brand],
+            ['Collection Name', product.collection],
+          ].filter(([, v]) => v);
+          return dtRows.length > 0 ? (
+            <div className="pdp-info-section">
+              <div className="pdp-section-heading">ℹ️ Product Details</div>
+              <table className="pdp-dtable">
+                <tbody>
+                  {dtRows.map(([k, v]) => (
+                    <tr key={k}><td>{k}</td><td>{v}</td></tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : null;
+        })()}
+
+        {/* ══ STYLE DETAILS ══ */}
+        {(() => {
+          const sItems = [
+            ['Colour', (product.colorNames || [])[selColor]],
+            ['Occasion', product.occasion],
+            ['Style Name', product.styleName],
+            ['Item Shape', product.itemShape],
+            ['Stone Color', product.stoneColor],
+            ['Stone Shape', product.stoneShape],
+            ['Charm Design', product.charmDesign],
+          ].filter(([, v]) => v);
+          return sItems.length > 0 ? (
+            <div className="pdp-info-section">
+              <div className="pdp-section-heading">✨ Style Details</div>
+              <div className="pdp-style-grid">
+                {sItems.map(([k, v]) => (
+                  <div key={k} className="pdp-style-item">
+                    <div className="pdp-style-label">{k}</div>
+                    <div className="pdp-style-value">{v}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null;
+        })()}
+
+        {/* ══ MEASUREMENTS ══ */}
+        {(() => {
+          const hasDim = product.length || product.breadth || product.height || product.dimensions;
+          const dimText = product.dimensions || (hasDim ? `${product.length || 0}L x ${product.breadth || 0}W x ${product.height || 0}H cm` : null);
+          const hasWeight = product.weight;
+          const weightText = hasWeight ? `${product.weight} kg` : null;
+
+          if (!dimText && !weightText) return null;
+
+          return (
+            <div className="pdp-info-section">
+              <div className="pdp-section-heading">📐 Measurements</div>
+              <div className="pdp-measure-row">
+                {dimText && (
+                  <div className="pdp-measure-item">
+                    <div className="pdp-measure-label">Item Dimensions</div>
+                    <div className="pdp-measure-value">{dimText}</div>
+                  </div>
+                )}
+                {weightText && (
+                  <div className="pdp-measure-item">
+                    <div className="pdp-measure-label">Item Weight</div>
+                    <div className="pdp-measure-value">{weightText}</div>
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* Reviews */}
         <p className="pdp-sey">— Customer Feedback —</p>
         <h2 className="pdp-sh">
@@ -1139,7 +1317,7 @@ const DetailPage = ({
           </div>
         ))}
 
-        {/* Similar Products — AFTER reviews */}
+        {/* Similar Products */}
         {similar.length > 0 && (
           <>
             <hr className="pdp-sdiv" />
@@ -1150,8 +1328,8 @@ const DetailPage = ({
             <div className="pdp-pgrid">
               {similar.map((sp) => {
                 const ts = tagStyles[sp.tag] || {
-                  bg: "#111",
-                  color: "#fdf9f9",
+                  bg: "#B5975A",
+                  color: "#0F0F0F",
                 };
                 return (
                   <div
@@ -1210,8 +1388,8 @@ const DetailPage = ({
             <div className="pdp-pgrid">
               {rvList.map((rv) => {
                 const ts = tagStyles[rv.tag] || {
-                  bg: "#111",
-                  color: "#fdf9f9",
+                  bg: "#B5975A",
+                  color: "#0F0F0F",
                 };
                 return (
                   <div
@@ -1402,8 +1580,8 @@ export default function ProductListing() {
           <Row className="g-4">
             {products.map((item, idx) => {
               const ts = tagStyles[item.tag] || {
-                bg: "#111",
-                color: "#fffcfc",
+                bg: "#B5975A",
+                color: "#0F0F0F",
               };
               const isAdded = addedItems[item.id];
               const isWishlisted = isInWishlist(item.id);

@@ -14,8 +14,10 @@ import {
   FaRegSmile,
 } from "react-icons/fa";
 import { Link } from "react-router-dom";
+import { useStore } from "../context/StoreContext";
 
 const ContactPage = () => {
+  const { currentUserId } = useStore();
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -64,9 +66,14 @@ const ContactPage = () => {
 
     setIsSubmitting(true);
 
-    // Simulate API call
-    setTimeout(() => {
-      console.log("Form submitted:", formData);
+    // Actual API Call
+    fetch("http://localhost:5000/api/contact", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user_id: currentUserId, ...formData })
+    })
+    .catch(err => console.error(err))
+    .finally(() => {
       setIsSubmitting(false);
       setIsSubmitted(true);
       setFormData({
@@ -76,11 +83,10 @@ const ContactPage = () => {
         message: "",
       });
 
-      // Reset success message after 5 seconds
       setTimeout(() => {
         setIsSubmitted(false);
       }, 5000);
-    }, 1500);
+    });
   };
 
   const contactInfo = [

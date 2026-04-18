@@ -9,10 +9,13 @@ import ShippingManagement from "./ShippingManagement";
 import ReturnsManagement from "./ReturnsManagement";
 import PaymentsManagement from "./PaymentsManagement";
 import AdminProfile from "./AdminProfile";
+import { useProducts } from "../context/ProductContext";
 import "./AdminDashboard.css";
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState("products");
+  const { products: contextProducts, setProducts: setContextProducts } = useProducts();
+  
   const [stats, setStats] = useState({
     totalProducts: 0,
     totalOrders: 0,
@@ -23,40 +26,11 @@ const AdminDashboard = () => {
     totalPayments: 0,
   });
 
-  const [products, setProducts] = useState([
-    {
-      id: 1,
-      name: "Modern Chair",
-      price: 99.99,
-      category: "Furniture",
-      stock: 25,
-      image: "https://via.placeholder.com/100",
-    },
-    {
-      id: 2,
-      name: "Wooden Table",
-      price: 199.99,
-      category: "Furniture",
-      stock: 10,
-      image: "https://via.placeholder.com/100",
-    },
-    {
-      id: 3,
-      name: "LED Lamp",
-      price: 29.99,
-      category: "Lighting",
-      stock: 50,
-      image: "https://via.placeholder.com/100",
-    },
-    {
-      id: 4,
-      name: "Desk Organizer",
-      price: 19.99,
-      category: "Accessories",
-      stock: 5,
-      image: "https://via.placeholder.com/100",
-    },
-  ]);
+  const [products, setProducts] = useState(contextProducts);
+
+  useEffect(() => {
+    setProducts(contextProducts);
+  }, [contextProducts]);
 
   const [orders, setOrders] = useState([
     {

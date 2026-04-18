@@ -212,30 +212,30 @@
 
 /* Product Details */
 .product-details {
-  padding: 20px;
+  padding: 12px 15px;
 }
 
 .product-category {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   text-transform: uppercase;
   letter-spacing: 1px;
   color: #999;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
 .product-name {
-  font-size: 1.1rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: #1a1a2e;
-  margin: 0 0 10px 0;
-  line-height: 1.4;
+  margin: 0 0 6px 0;
+  line-height: 1.3;
 }
 
 /* Colors */
 .product-colors {
   display: flex;
-  gap: 6px;
-  margin-bottom: 12px;
+  gap: 5px;
+  margin-bottom: 8px;
 }
 
 .color-dot {
@@ -255,8 +255,8 @@
 .product-rating {
   display: flex;
   align-items: center;
-  gap: 5px;
-  margin-bottom: 12px;
+  gap: 4px;
+  margin-bottom: 8px;
 }
 
 .star {
@@ -283,8 +283,8 @@
 .product-price {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 15px;
+  gap: 8px;
+  margin-bottom: 10px;
 }
 
 .current-price {
@@ -305,9 +305,9 @@
   background: linear-gradient(135deg, #000000 0%, #2c3e50 100%);
   color: white;
   border: none;
-  padding: 12px;
-  border-radius: 40px;
-  font-size: 0.9rem;
+  padding: 10px;
+  border-radius: 30px;
+  font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -663,30 +663,30 @@
 
 /* Product Info */
 .product-info {
-  padding: 20px;
+  padding: 12px 15px;
 }
 
 .product-category {
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   text-transform: uppercase;
   letter-spacing: 1px;
   color: #999;
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
 .product-name {
-  font-size: 1.1rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: #1a1a2e;
-  margin: 0 0 12px 0;
-  line-height: 1.4;
+  margin: 0 0 8px 0;
+  line-height: 1.3;
 }
 
 /* Color Options */
 .color-options {
   display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 6px;
+  margin-bottom: 8px;
 }
 
 .color-circle {
@@ -707,8 +707,8 @@
 .rating-section {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
+  gap: 6px;
+  margin-bottom: 8px;
 }
 
 .stars {
@@ -734,8 +734,8 @@
 .price-section {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 15px;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
 .current-price {
@@ -756,9 +756,9 @@
   background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
   color: white;
   border: none;
-  padding: 12px;
-  border-radius: 40px;
-  font-size: 0.85rem;
+  padding: 10px;
+  border-radius: 30px;
+  font-size: 0.8rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;

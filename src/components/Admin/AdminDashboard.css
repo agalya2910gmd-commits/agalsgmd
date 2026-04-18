@@ -1554,12 +1554,13 @@
 /* Welcome Section */
 .welcome-section {
   position: relative;
-  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-  border-radius: 16px;
+  background: linear-gradient(135deg, #e7e9e8 0%, #d3d3d2 100%);
+  border-radius: 6px;
   padding: 40px;
-  margin-bottom: 30px;
+  margin-bottom: 10px;
   overflow: hidden;
-  color: white;
+  color: rgb(14, 12, 12);
+ 
 }
 
 .welcome-animation {
@@ -1609,7 +1610,7 @@
   font-size: 32px;
   margin-bottom: 12px;
   font-weight: 700;
-  background: linear-gradient(135deg, #fff 0%, #ddd 100%);
+  background: linear-gradient(135deg, #050505 0%, #070707 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   animation: slideIn 0.8s ease-out;

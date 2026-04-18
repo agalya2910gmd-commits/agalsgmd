@@ -1,7 +1,6 @@
-// components/Auth/Signup.jsx
+// Signup.jsx
 import React, { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import { useAuth } from "../../context/AuthContext";
+import { useNavigate } from "react-router-dom";
 import {
   FaUser,
   FaEnvelope,
@@ -12,120 +11,156 @@ import {
   FaArrowRight,
   FaCheckCircle,
   FaUserShield,
+  FaCalendarAlt,
+  FaVenusMars,
 } from "react-icons/fa";
 
 function Signup() {
   const navigate = useNavigate();
-  const { signup } = useAuth();
   const [form, setForm] = useState({
     name: "",
     email: "",
     password: "",
     confirmPassword: "",
     isSeller: false,
-    isAdmin: false, // Add admin flag
-    adminSecret: "", // Add secret code for admin creation
     agreeTerms: false,
+    storeName: "",
+    gstin: "",
+    bankAccount: "",
+    ifscCode: "",
+    dob: "",
+    gender: "",
   });
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const [focusedField, setFocusedField] = useState(null);
-  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [confirmPasswordError, setConfirmPasswordError] = useState("");
 
-  const customerImages = [
-    "https://images.pexels.com/photos/4386327/pexels-photo-4386327.jpeg?auto=compress&cs=tinysrgb&w=800&h=1000&fit=crop",
-  ];
-  const sellerImages = [
-    "https://images.pexels.com/photos/837140/pexels-photo-837140.jpeg?auto=compress&cs=tinysrgb&w=800&h=1000&fit=crop",
-  ];
-  const currentImages = form.isSeller ? sellerImages : customerImages;
+  // Single attractive fashion image
+  const fashionImage =
+    "https://images.pexels.com/photos/1043474/pexels-photo-1043474.jpeg?auto=compress&cs=tinysrgb&w=1200&h=1600&fit=crop";
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentImageIndex((prev) => (prev + 1) % currentImages.length);
-    }, 4000);
-    return () => clearInterval(interval);
-  }, [currentImages.length]);
+    const urlParams = new URLSearchParams(window.location.search);
+    const type = urlParams.get("type");
+    if (type === "seller") {
+      setForm((prev) => ({ ...prev, isSeller: true }));
+    }
+  }, []);
+
+  const validateConfirmPassword = (password, confirmPassword) => {
+    if (confirmPassword && password !== confirmPassword) {
+      setConfirmPasswordError("Passwords do not match");
+      return false;
+    } else {
+      setConfirmPasswordError("");
+      return true;
+    }
+  };
 
   const handleChange = (e) => {
     const value =
       e.target.type === "checkbox" ? e.target.checked : e.target.value;
-    setForm({ ...form, [e.target.name]: value });
+    const fieldName = e.target.name;
+
+    setForm({ ...form, [fieldName]: value });
     setError("");
     setSuccess("");
+
+    // Validate confirm password when either password or confirmPassword changes
+    if (fieldName === "password") {
+      validateConfirmPassword(value, form.confirmPassword);
+    } else if (fieldName === "confirmPassword") {
+      validateConfirmPassword(form.password, value);
+    }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
+
     if (!form.name || !form.email || !form.password || !form.confirmPassword) {
       setError("Please fill in all fields");
       return;
     }
+
+    if (form.isSeller) {
+      if (
+        !form.storeName ||
+        !form.gstin ||
+        !form.bankAccount ||
+        !form.ifscCode
+      ) {
+        setError("Please fill in all store and bank details");
+        return;
+      }
+    }
+
+    // Frontend password match validation
     if (form.password !== form.confirmPassword) {
+      setConfirmPasswordError("Passwords do not match");
       setError("Passwords do not match");
       return;
     }
+
     if (form.password.length < 6) {
       setError("Password must be at least 6 characters");
       return;
     }
+
     if (!form.agreeTerms) {
       setError("Please agree to the Terms & Conditions");
       return;
     }
 
-    const users = JSON.parse(localStorage.getItem("nivest_users") || "[]");
-    if (users.find((u) => u.email === form.email)) {
-      setError("An account with this email already exists");
-      return;
-    }
+    setIsLoading(true);
+    setError("");
+    setSuccess("");
 
-    // Check for admin secret code
-    let isAdmin = false;
-    if (form.adminSecret === "ADMIN2024") {
-      isAdmin = true;
-    }
-
-    const newUser = {
-      id: Date.now(),
-      name: form.name,
-      email: form.email,
-      password: form.password,
-      isSeller: form.isSeller && !isAdmin, // Can't be both seller and admin
-      isAdmin: isAdmin,
-      role: isAdmin ? "admin" : form.isSeller ? "seller" : "customer",
-      createdAt: new Date().toISOString(),
-      ...(form.isSeller &&
-        !isAdmin && {
-          storeName: `${form.name}'s Store`,
-          storeDescription: "Welcome to my store!",
-          totalProducts: 0,
-          totalSales: 0,
-          sellerRating: 0,
+    try {
+      const response = await fetch("http://localhost:5000/api/signup", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: form.name,
+          email: form.email,
+          password: form.password,
+          isSeller: form.isSeller,
+          store_name: form.storeName,
+          gstin: form.gstin,
+          bank_account: form.bankAccount,
+          ifsc_code: form.ifscCode,
+          dob: form.dob,
+          gender: form.gender,
         }),
-    };
+      });
 
-    users.push(newUser);
-    localStorage.setItem("nivest_users", JSON.stringify(users));
+      const data = await response.json();
 
-    setSuccess(
-      isAdmin
-        ? "Admin account created! Redirecting..."
-        : "Account created successfully! Redirecting...",
-    );
-
-    setTimeout(() => {
-      signup(newUser);
-      if (isAdmin) {
-        navigate("/admin");
-      } else if (form.isSeller) {
-        navigate("/seller-dashboard");
-      } else {
-        navigate("/");
+      if (!response.ok) {
+        setError(data.message || "Signup failed");
+        setIsLoading(false);
+        return;
       }
-    }, 1000);
+
+      setSuccess(
+        data.message ||
+          "Account created successfully. Please login to continue.",
+      );
+
+      setTimeout(() => {
+        navigate("/login");
+      }, 1000);
+    } catch (error) {
+      console.error("Signup error:", error);
+      setError(
+        "Server connection failed. Please make sure the backend server is running.",
+      );
+      setIsLoading(false);
+    }
   };
 
   const gold = "#C9A84C";
@@ -135,18 +170,12 @@ function Signup() {
   const goldGradShine = `linear-gradient(135deg, #8B6520 0%, #C9A84C 30%, #F0D878 55%, #C9A84C 75%, #A07830 100%)`;
 
   const keyframes = `
-    @keyframes shimmer {
-      0%   { background-position: -200% center; }
-      100% { background-position:  200% center; }
-    }
-    @keyframes pulseGlow {
-      0%, 100% { box-shadow: 0 32px 80px rgba(201,168,76,0.28), 0 4px 24px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.9); }
-      50%       { box-shadow: 0 32px 80px rgba(201,168,76,0.42), 0 4px 24px rgba(0,0,0,0.07), inset 0 1px 0 rgba(255,255,255,0.9); }
-    }
-    @keyframes floatBlob {
-      0%, 100% { transform: scale(1) translate(0, 0); }
-      50%       { transform: scale(1.08) translate(12px, -12px); }
-    }
+    @keyframes shimmer { 0% { background-position: -200% center; } 100% { background-position: 200% center; } }
+    @keyframes pulseGlow { 0%, 100% { box-shadow: 0 20px 50px rgba(201,168,76,0.2); } 50% { box-shadow: 0 20px 50px rgba(201,168,76,0.35); } }
+    @keyframes floatBlob { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.05); } }
+    @keyframes zoomIn { 0% { transform: scale(1.1); opacity: 0.7; } 100% { transform: scale(1); opacity: 1; } }
+    @keyframes slideInRight { 0% { transform: translateX(20px); opacity: 0; } 100% { transform: translateX(0); opacity: 1; } }
+    @keyframes fadeInUp { 0% { transform: translateY(20px); opacity: 0; } 100% { transform: translateY(0); opacity: 1; } }
   `;
 
   const styles = {
@@ -158,53 +187,55 @@ function Signup() {
       justifyContent: "center",
       background:
         "linear-gradient(145deg, #fdfaf3 0%, #f7f0e0 45%, #f2e8cc 100%)",
-      position: "relative",
+      position: "fixed",
+      top: 0,
+      left: 0,
       overflow: "hidden",
+      padding: 0,
+      margin: 0,
     },
     bgCircle1: {
       position: "absolute",
-      width: "500px",
-      height: "500px",
+      width: "550px",
+      height: "550px",
       borderRadius: "50%",
       background:
-        "radial-gradient(circle, rgba(240,216,120,0.30) 0%, rgba(201,168,76,0.12) 45%, transparent 70%)",
-      top: "-150px",
-      left: "-150px",
+        "radial-gradient(circle, rgba(240,216,120,0.22) 0%, rgba(201,168,76,0.08) 45%, transparent 70%)",
+      top: "-180px",
+      left: "-180px",
       pointerEvents: "none",
       animation: "floatBlob 8s ease-in-out infinite",
     },
     bgCircle2: {
       position: "absolute",
-      width: "460px",
-      height: "460px",
+      width: "380px",
+      height: "380px",
       borderRadius: "50%",
       background:
-        "radial-gradient(circle, rgba(240,216,120,0.22) 0%, rgba(201,168,76,0.08) 50%, transparent 70%)",
-      bottom: "-100px",
-      right: "-100px",
+        "radial-gradient(circle, rgba(240,216,120,0.18) 0%, rgba(201,168,76,0.06) 50%, transparent 70%)",
+      bottom: "-80px",
+      right: "-80px",
       pointerEvents: "none",
       animation: "floatBlob 10s ease-in-out infinite reverse",
     },
     bgCircle3: {
       position: "absolute",
-      width: "280px",
-      height: "280px",
+      width: "200px",
+      height: "200px",
       borderRadius: "50%",
       background:
-        "radial-gradient(circle, rgba(255,240,180,0.18) 0%, transparent 70%)",
+        "radial-gradient(circle, rgba(255,240,180,0.12) 0%, transparent 70%)",
       top: "25%",
-      right: "20%",
+      right: "18%",
       pointerEvents: "none",
     },
     wrapper: {
       display: "flex",
-      width: "min(1060px, 92vw)",
-      height: "min(700px, 94vh)",
+      width: "100%",
+      height: "100%",
       background: "linear-gradient(160deg, #ffffff 0%, #fdfbf5 100%)",
-      borderRadius: "28px",
-      overflow: "auto",
-      animation: "pulseGlow 5s ease-in-out infinite",
-      border: "1px solid rgba(240,216,120,0.50)",
+      borderRadius: 0,
+      overflow: "hidden",
       position: "relative",
       zIndex: 1,
     },
@@ -218,38 +249,42 @@ function Signup() {
       backgroundSize: "200% auto",
       animation: "shimmer 3s linear infinite",
       zIndex: 10,
-      borderRadius: "28px 28px 0 0",
     },
     leftSection: {
-      width: "420px",
-      minWidth: "420px",
-      padding: "1.8rem 2.4rem",
+      width: "50%",
+      padding: "2rem 3rem",
       background: "linear-gradient(180deg, #ffffff 0%, #fdfbf6 100%)",
       display: "flex",
       flexDirection: "column",
-      justifyContent: "center",
+      justifyContent: "flex-start",
       overflowY: "auto",
+      paddingTop: "2.5rem",
+      paddingBottom: "2.5rem",
+      scrollbarWidth: "none",
+      msOverflowStyle: "none",
       position: "relative",
+      animation: "slideInRight 0.8s ease-out",
     },
     leftGloss: {
       position: "absolute",
       top: 0,
       left: 0,
       right: 0,
-      height: "160px",
+      height: "100px",
       background:
-        "linear-gradient(180deg, rgba(255,252,240,0.85) 0%, transparent 100%)",
+        "linear-gradient(180deg, rgba(255,252,240,0.7) 0%, transparent 100%)",
       pointerEvents: "none",
       zIndex: 0,
     },
     logoRow: {
       textAlign: "center",
-      marginBottom: "0.1rem",
+      marginBottom: "0.3rem",
       position: "relative",
       zIndex: 1,
+      animation: "fadeInUp 0.6s ease-out",
     },
     logoText: {
-      fontSize: "1.7rem",
+      fontSize: "2rem",
       fontWeight: 800,
       background: goldGradShine,
       backgroundSize: "200% auto",
@@ -261,245 +296,161 @@ function Signup() {
     },
     logoTagline: {
       textAlign: "center",
-      fontSize: "0.6rem",
-      letterSpacing: "2.5px",
+      fontSize: "0.65rem",
+      letterSpacing: "3px",
       color: "#c8ae70",
-      marginBottom: "0.1rem",
+      marginBottom: "0.2rem",
       textTransform: "uppercase",
-      position: "relative",
-      zIndex: 1,
     },
     heading: {
       textAlign: "center",
-      fontSize: "1.15rem",
+      fontSize: "1.6rem",
       fontWeight: 700,
       color: "#1a1410",
-      margin: "0.3rem 0 0.08rem",
-      position: "relative",
-      zIndex: 1,
+      margin: "0.3rem 0 0.2rem",
+      animation: "fadeInUp 0.7s ease-out",
     },
     subText: {
       textAlign: "center",
       color: "#b8a47a",
-      fontSize: "0.72rem",
-      marginBottom: "0.85rem",
-      position: "relative",
-      zIndex: 1,
+      fontSize: "0.85rem",
+      marginBottom: "1.2rem",
+      animation: "fadeInUp 0.8s ease-out",
     },
     goldDivider: {
-      width: "36px",
-      height: "2.5px",
+      width: "48px",
+      height: "3px",
       background: goldGradShine,
       backgroundSize: "200% auto",
       animation: "shimmer 3s linear infinite",
-      margin: "0 auto 0.9rem auto",
+      margin: "0 auto 1.2rem auto",
       borderRadius: "2px",
-      position: "relative",
-      zIndex: 1,
     },
     errorAlert: {
       background: "linear-gradient(135deg, #fff8f8 0%, #fff0f0 100%)",
       borderLeft: "3px solid #e53e3e",
       color: "#c53030",
-      padding: "0.45rem 0.85rem",
+      padding: "0.6rem 1rem",
       borderRadius: "10px",
-      fontSize: "0.72rem",
-      marginBottom: "0.75rem",
-      boxShadow: "0 2px 8px rgba(229,62,62,0.10)",
-      position: "relative",
-      zIndex: 1,
+      fontSize: "0.75rem",
+      marginBottom: "0.8rem",
+      animation: "fadeInUp 0.3s ease-out",
     },
     successAlert: {
       background: "linear-gradient(135deg, #f6fff9 0%, #edfff4 100%)",
       borderLeft: "3px solid #38a169",
       color: "#276749",
-      padding: "0.45rem 0.85rem",
+      padding: "0.6rem 1rem",
       borderRadius: "10px",
-      fontSize: "0.72rem",
-      marginBottom: "0.75rem",
-      boxShadow: "0 2px 8px rgba(56,161,105,0.10)",
-      position: "relative",
-      zIndex: 1,
+      fontSize: "0.75rem",
+      marginBottom: "0.8rem",
+      animation: "fadeInUp 0.3s ease-out",
     },
-    formGroup: { marginBottom: "0.75rem", position: "relative", zIndex: 1 },
+    formGroup: { marginBottom: "1rem", animation: "fadeInUp 0.9s ease-out" },
     label: {
       display: "block",
-      fontSize: "0.62rem",
+      fontSize: "0.7rem",
       fontWeight: 700,
       textTransform: "uppercase",
       letterSpacing: "1.2px",
       color: gold,
-      marginBottom: "0.25rem",
+      marginBottom: "0.4rem",
     },
     inputWrapper: { position: "relative" },
     inputIcon: {
       position: "absolute",
-      left: "0.95rem",
+      left: "1rem",
       top: "50%",
       transform: "translateY(-50%)",
-      color: focusedField ? gold : "#d4bc88",
-      fontSize: "0.8rem",
-      transition: "color 0.3s ease",
+      color: "#d4bc88",
+      fontSize: "0.9rem",
+      pointerEvents: "none",
     },
     input: {
       width: "100%",
-      padding: "0.65rem 1rem 0.65rem 2.6rem",
+      padding: "0.8rem 1rem 0.8rem 2.75rem",
       border: `1.5px solid ${focusedField ? gold : "#e8dcc0"}`,
-      borderRadius: "12px",
-      fontSize: "0.82rem",
-      transition: "all 0.3s ease",
+      borderRadius: "14px",
+      fontSize: "0.85rem",
+      transition: "all 0.2s ease",
       background: focusedField
         ? "linear-gradient(135deg, #fffef8 0%, #fefbf0 100%)"
         : "linear-gradient(135deg, #fdfaf0 0%, #faf6e8 100%)",
-      boxShadow: focusedField
-        ? "0 0 0 3px rgba(201,168,76,0.15), 0 2px 8px rgba(201,168,76,0.12)"
-        : "0 1px 4px rgba(160,120,48,0.06)",
       boxSizing: "border-box",
       outline: "none",
-      color: "#1a1410",
     },
     passwordToggle: {
       position: "absolute",
-      right: "0.95rem",
+      right: "1rem",
       top: "50%",
       transform: "translateY(-50%)",
       background: "none",
       border: "none",
       color: "#c4a55a",
       cursor: "pointer",
-      fontSize: "0.8rem",
-    },
-    sellerToggle: {
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "space-between",
-      background: "linear-gradient(135deg, #fdfbf0 0%, #faf5e0 100%)",
-      padding: "0.65rem 0.9rem",
-      borderRadius: "12px",
-      marginBottom: "0.75rem",
-      cursor: "pointer",
-      transition: "all 0.3s ease",
-      border: "1.5px solid rgba(201,168,76,0.28)",
-      boxShadow: "0 2px 8px rgba(201,168,76,0.08)",
-      position: "relative",
-      zIndex: 1,
-    },
-    sellerToggleLeft: { display: "flex", alignItems: "center", gap: "0.75rem" },
-    sellerCheckbox: {
-      accentColor: gold,
-      width: "1.1rem",
-      height: "1.1rem",
-      cursor: "pointer",
     },
     sellerFeatures: {
       background: "linear-gradient(135deg, #fffef8 0%, #fef6dc 100%)",
-      borderRadius: "12px",
-      padding: "0.75rem 1rem",
-      marginBottom: "0.75rem",
+      borderRadius: "14px",
+      padding: "0.8rem",
+      marginBottom: "1rem",
       border: "1px solid rgba(201,168,76,0.35)",
-      boxShadow: "0 3px 12px rgba(201,168,76,0.12)",
-      position: "relative",
-      zIndex: 1,
+      animation: "fadeInUp 1.1s ease-out",
     },
     sellerFeaturesTitle: {
-      fontSize: "0.72rem",
+      fontSize: "0.8rem",
       fontWeight: 700,
       color: goldDark,
-      marginBottom: "0.5rem",
+      marginBottom: "0.6rem",
     },
     sellerFeatureItem: {
-      fontSize: "0.68rem",
+      fontSize: "0.75rem",
       color: "#8a7550",
-      marginBottom: "0.3rem",
-      display: "flex",
-      alignItems: "center",
-      gap: "0.45rem",
-      listStyle: "none",
-    },
-    adminSecretContainer: {
-      background: "linear-gradient(135deg, #fff8f0 0%, #fff0e0 100%)",
-      borderRadius: "12px",
-      padding: "0.65rem 0.9rem",
-      marginBottom: "0.75rem",
-      border: "1px dashed rgba(201,168,76,0.50)",
-      position: "relative",
-      zIndex: 1,
-    },
-    adminSecretLabel: {
+      marginBottom: "0.4rem",
       display: "flex",
       alignItems: "center",
       gap: "0.5rem",
-      fontSize: "0.7rem",
-      color: goldDark,
-      marginBottom: "0.4rem",
-      cursor: "pointer",
-    },
-    adminSecretInput: {
-      width: "100%",
-      padding: "0.5rem",
-      border: `1px solid ${gold}`,
-      borderRadius: "8px",
-      fontSize: "0.75rem",
-      background: "white",
-      outline: "none",
+      listStyle: "none",
     },
     checkboxGroup: {
       display: "flex",
       alignItems: "center",
-      gap: "0.6rem",
-      marginBottom: "0.85rem",
-      position: "relative",
-      zIndex: 1,
+      gap: "0.75rem",
+      marginBottom: "1rem",
+      animation: "fadeInUp 1.3s ease-out",
     },
     checkbox: {
-      width: "1rem",
-      height: "1rem",
+      width: "1.1rem",
+      height: "1.1rem",
       accentColor: gold,
       cursor: "pointer",
     },
-    checkboxLabel: { fontSize: "0.72rem", color: "#a08858", cursor: "pointer" },
+    checkboxLabel: { fontSize: "0.8rem", color: "#a08858", cursor: "pointer" },
     link: { color: gold, textDecoration: "none", fontWeight: 700 },
     submitBtn: {
       width: "100%",
-      padding: "0.78rem",
+      padding: "0.9rem",
       border: "none",
-      borderRadius: "12px",
+      borderRadius: "14px",
       fontWeight: 700,
-      fontSize: "0.75rem",
+      fontSize: "0.85rem",
       textTransform: "uppercase",
       letterSpacing: "1.5px",
       background: goldGradShine,
       backgroundSize: "200% auto",
       animation: "shimmer 4s linear infinite",
       color: "#fff",
-      transition: "all 0.3s ease",
-      cursor: "pointer",
+      cursor: isLoading ? "not-allowed" : "pointer",
       display: "flex",
       alignItems: "center",
       justifyContent: "center",
-      gap: "0.5rem",
-      boxShadow:
-        "0 6px 20px rgba(201,168,76,0.52), 0 2px 6px rgba(160,120,48,0.20), inset 0 1px 0 rgba(255,255,255,0.25)",
-      position: "relative",
-      zIndex: 1,
-    },
-    divider: {
-      textAlign: "center",
-      margin: "0.65rem 0",
-      color: "#d4c090",
-      fontSize: "0.72rem",
-      position: "relative",
-      zIndex: 1,
-    },
-    authLink: { textAlign: "center", position: "relative", zIndex: 1 },
-    authLinkText: {
-      color: gold,
-      textDecoration: "none",
-      fontWeight: 700,
-      fontSize: "0.78rem",
+      gap: "0.75rem",
+      boxShadow: "0 6px 20px rgba(201,168,76,0.4)",
+      transition: "all 0.3s ease",
+      opacity: isLoading ? 0.7 : 1,
     },
     rightSection: {
-      flex: 1,
+      width: "50%",
       position: "relative",
       overflow: "hidden",
       background: "#111",
@@ -511,18 +462,14 @@ function Signup() {
       width: "100%",
       height: "100%",
       objectFit: "cover",
-      opacity: 0,
-      transform: "scale(1.08)",
-      transition: "opacity 1.2s ease-in-out, transform 6s ease-in-out",
-      filter: "brightness(1.08) saturate(1.10)",
+      animation: "zoomIn 1.2s ease-out",
+      filter: "brightness(1.05) saturate(1.1)",
     },
-    activeImage: { opacity: 0.88, transform: "scale(1)" },
     imageOverlay: {
       position: "absolute",
       inset: 0,
       background:
-        "linear-gradient(160deg, rgba(180,140,48,0.30) 0%, rgba(0,0,0,0.48) 100%)",
-      pointerEvents: "none",
+        "linear-gradient(160deg, rgba(180,140,48,0.2) 0%, rgba(0,0,0,0.4) 100%)",
     },
     imageShine: {
       position: "absolute",
@@ -531,61 +478,46 @@ function Signup() {
       width: "40%",
       height: "100%",
       background:
-        "linear-gradient(105deg, transparent 40%, rgba(255,240,180,0.10) 50%, transparent 60%)",
+        "linear-gradient(105deg, transparent 40%, rgba(255,240,180,0.12) 50%, transparent 60%)",
       animation: "shimmer 6s linear infinite",
-      backgroundSize: "200% 100%",
       pointerEvents: "none",
       zIndex: 2,
     },
     imageBadge: {
       position: "absolute",
-      bottom: "1.5rem",
-      left: "1.5rem",
-      right: "1.5rem",
-      background: "rgba(255,255,255,0.10)",
-      border: "1px solid rgba(240,216,120,0.55)",
-      borderRadius: "14px",
-      padding: "1rem 1.2rem",
-      backdropFilter: "blur(10px)",
-      boxShadow:
-        "0 4px 24px rgba(0,0,0,0.18), inset 0 1px 0 rgba(255,255,255,0.15)",
+      bottom: "2rem",
+      left: "2rem",
+      right: "2rem",
+      background: "rgba(255,255,255,0.12)",
+      border: "1px solid rgba(240,216,120,0.6)",
+      borderRadius: "16px",
+      padding: "1.2rem 1.5rem",
+      backdropFilter: "blur(12px)",
       zIndex: 3,
+      animation: "slideInRight 0.8s ease-out",
     },
     imageBadgeTitle: {
-      fontSize: "0.7rem",
+      fontSize: "0.75rem",
       fontWeight: 700,
       letterSpacing: "2.5px",
       color: goldLight,
-      marginBottom: "0.3rem",
+      marginBottom: "0.5rem",
       textTransform: "uppercase",
     },
     imageBadgeText: {
-      fontSize: "0.72rem",
-      color: "rgba(255,255,255,0.82)",
+      fontSize: "0.8rem",
+      color: "rgba(255,255,255,0.9)",
       lineHeight: 1.5,
       margin: 0,
     },
-    dotIndicator: {
-      position: "absolute",
-      top: "1.2rem",
-      right: "1.2rem",
+    errorMessage: {
+      color: "#e53e3e",
+      fontSize: "0.7rem",
+      marginTop: "0.4rem",
+      marginLeft: "0.5rem",
       display: "flex",
-      gap: "0.45rem",
-      zIndex: 3,
-    },
-    dot: {
-      width: "7px",
-      height: "7px",
-      borderRadius: "50%",
-      background: "rgba(255,255,255,0.40)",
-      cursor: "pointer",
-      transition: "all 0.3s ease",
-    },
-    activeDot: {
-      width: "22px",
-      borderRadius: "4px",
-      background: goldGrad,
-      boxShadow: "0 0 8px rgba(201,168,76,0.60)",
+      alignItems: "center",
+      gap: "0.3rem",
     },
   };
 
@@ -596,19 +528,16 @@ function Signup() {
         <div style={styles.bgCircle1} />
         <div style={styles.bgCircle2} />
         <div style={styles.bgCircle3} />
-
         <div style={styles.wrapper}>
           <div style={styles.cardGloss} />
-
           <div style={styles.leftSection}>
             <div style={styles.leftGloss} />
-
             <div style={styles.logoRow}>
               <FaUserShield
                 style={{
-                  fontSize: "2rem",
+                  fontSize: "2.2rem",
                   color: gold,
-                  marginBottom: "0.5rem",
+                  marginBottom: "0.3rem",
                 }}
               />
             </div>
@@ -616,10 +545,8 @@ function Signup() {
             <h2 style={styles.heading}>Create Account</h2>
             <p style={styles.subText}>Join us and start your journey today</p>
             <div style={styles.goldDivider} />
-
             {error && <div style={styles.errorAlert}>{error}</div>}
             {success && <div style={styles.successAlert}>{success}</div>}
-
             <form onSubmit={handleSubmit}>
               <div style={styles.formGroup}>
                 <label style={styles.label}>Full Name</label>
@@ -628,7 +555,10 @@ function Signup() {
                   <input
                     type="text"
                     name="name"
-                    style={styles.input}
+                    style={{
+                      ...styles.input,
+                      borderColor: focusedField === "name" ? gold : "#e8dcc0",
+                    }}
                     placeholder="John Doe"
                     value={form.name}
                     onChange={handleChange}
@@ -637,7 +567,6 @@ function Signup() {
                   />
                 </div>
               </div>
-
               <div style={styles.formGroup}>
                 <label style={styles.label}>Email Address</label>
                 <div style={styles.inputWrapper}>
@@ -645,7 +574,10 @@ function Signup() {
                   <input
                     type="email"
                     name="email"
-                    style={styles.input}
+                    style={{
+                      ...styles.input,
+                      borderColor: focusedField === "email" ? gold : "#e8dcc0",
+                    }}
                     placeholder="hello@example.com"
                     value={form.email}
                     onChange={handleChange}
@@ -654,7 +586,6 @@ function Signup() {
                   />
                 </div>
               </div>
-
               <div style={styles.formGroup}>
                 <label style={styles.label}>Password</label>
                 <div style={styles.inputWrapper}>
@@ -662,7 +593,11 @@ function Signup() {
                   <input
                     type={showPassword ? "text" : "password"}
                     name="password"
-                    style={styles.input}
+                    style={{
+                      ...styles.input,
+                      borderColor:
+                        focusedField === "password" ? gold : "#e8dcc0",
+                    }}
                     placeholder="Min. 6 characters"
                     value={form.password}
                     onChange={handleChange}
@@ -675,119 +610,223 @@ function Signup() {
                     onClick={() => setShowPassword(!showPassword)}
                   >
                     {showPassword ? (
-                      <FaEyeSlash size={12} />
+                      <FaEyeSlash size={14} />
                     ) : (
-                      <FaEye size={12} />
+                      <FaEye size={14} />
                     )}
                   </button>
                 </div>
               </div>
-
               <div style={styles.formGroup}>
                 <label style={styles.label}>Confirm Password</label>
                 <div style={styles.inputWrapper}>
                   <FaLock style={styles.inputIcon} />
                   <input
-                    type={showPassword ? "text" : "password"}
+                    type="password"
                     name="confirmPassword"
-                    style={styles.input}
+                    style={{
+                      ...styles.input,
+                      borderColor: confirmPasswordError
+                        ? "#e53e3e"
+                        : focusedField === "confirm"
+                          ? gold
+                          : "#e8dcc0",
+                    }}
                     placeholder="Repeat password"
                     value={form.confirmPassword}
                     onChange={handleChange}
                     onFocus={() => setFocusedField("confirm")}
-                    onBlur={() => setFocusedField(null)}
+                    onBlur={() => {
+                      setFocusedField(null);
+                      validateConfirmPassword(
+                        form.password,
+                        form.confirmPassword,
+                      );
+                    }}
                   />
                 </div>
-              </div>
-
-              {/* Seller toggle */}
-              <div
-                style={styles.sellerToggle}
-                onClick={() => setForm({ ...form, isSeller: !form.isSeller })}
-                onMouseEnter={(e) => (e.currentTarget.style.borderColor = gold)}
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.borderColor = "rgba(201,168,76,0.28)")
-                }
-              >
-                <div style={styles.sellerToggleLeft}>
-                  {form.isSeller ? (
-                    <FaStore size={18} color={gold} />
-                  ) : (
-                    <FaUser size={18} color={gold} />
-                  )}
-                  <div>
-                    <p
-                      style={{
-                        margin: 0,
-                        fontSize: "0.8rem",
-                        fontWeight: 600,
-                        color: "#1a1410",
-                      }}
-                    >
-                      {form.isSeller ? "Seller Account" : "Customer Account"}
-                    </p>
-                    <p
-                      style={{
-                        margin: 0,
-                        fontSize: "0.65rem",
-                        color: "#b09060",
-                      }}
-                    >
-                      {form.isSeller
-                        ? "Sell products & manage your store"
-                        : "Shop & discover amazing products"}
-                    </p>
+                {confirmPasswordError && (
+                  <div style={styles.errorMessage}>
+                    <span>⚠️</span> {confirmPasswordError}
                   </div>
-                </div>
-                <input
-                  type="checkbox"
-                  name="isSeller"
-                  checked={form.isSeller}
-                  onChange={handleChange}
-                  style={styles.sellerCheckbox}
-                  onClick={(e) => e.stopPropagation()}
-                />
-              </div>
-
-              {/* Admin Secret Code Section - Hidden by default, click to show */}
-              <div style={styles.adminSecretContainer}>
-                <div
-                  style={styles.adminSecretLabel}
-                  onClick={() => setShowAdminPanel(!showAdminPanel)}
-                >
-                  <FaUserShield size={14} />
-                  <span>{showAdminPanel ? "Hide" : "Show"} Admin Options</span>
-                </div>
-                {showAdminPanel && (
-                  <input
-                    type="password"
-                    name="adminSecret"
-                    style={styles.adminSecretInput}
-                    placeholder="Enter admin secret code"
-                    value={form.adminSecret}
-                    onChange={handleChange}
-                  />
                 )}
               </div>
 
+              {/* Customer-only fields (shown when isSeller is false) */}
+              {!form.isSeller && (
+                <>
+                  <div style={styles.formGroup}>
+                    <label style={styles.label}>Date of Birth</label>
+                    <div style={styles.inputWrapper}>
+                      <FaCalendarAlt style={styles.inputIcon} />
+                      <input
+                        type="date"
+                        name="dob"
+                        style={{
+                          ...styles.input,
+                          borderColor:
+                            focusedField === "dob" ? gold : "#e8dcc0",
+                        }}
+                        value={form.dob}
+                        onChange={handleChange}
+                        onFocus={() => setFocusedField("dob")}
+                        onBlur={() => setFocusedField(null)}
+                      />
+                    </div>
+                  </div>
+                  <div style={styles.formGroup}>
+                    <label style={styles.label}>Gender</label>
+                    <div style={styles.inputWrapper}>
+                      <FaVenusMars style={styles.inputIcon} />
+                      <select
+                        name="gender"
+                        style={{
+                          ...styles.input,
+                          borderColor:
+                            focusedField === "gender" ? gold : "#e8dcc0",
+                          appearance: "none",
+                        }}
+                        value={form.gender}
+                        onChange={handleChange}
+                        onFocus={() => setFocusedField("gender")}
+                        onBlur={() => setFocusedField(null)}
+                      >
+                        <option value="">Select Gender</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {/* Seller-only fields (shown when isSeller is true) */}
               {form.isSeller && (
-                <div style={styles.sellerFeatures}>
-                  <p style={styles.sellerFeaturesTitle}>
-                    ✨ As a seller, you get:
-                  </p>
-                  <ul style={{ margin: 0, padding: 0 }}>
-                    {[
-                      "List unlimited products",
-                      "Real-time sales analytics",
-                      "Competitive commission rates",
-                      "Priority seller support",
-                    ].map((item) => (
-                      <li key={item} style={styles.sellerFeatureItem}>
-                        <FaCheckCircle size={10} color={gold} /> {item}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+                <>
+                  <div
+                    style={{
+                      marginTop: "1.5rem",
+                      marginBottom: "1rem",
+                      padding: "0.5rem 0",
+                      borderTop: "1.5px solid rgba(201,168,76,0.15)",
+                      textAlign: "center",
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: "0.8rem",
+                        fontWeight: 800,
+                        color: goldDark,
+                        textTransform: "uppercase",
+                        letterSpacing: "2px",
+                        background: "#fff",
+                        padding: "0 15px",
+                        position: "relative",
+                        top: "-20px",
+                      }}
+                    >
+                      Store Details
+                    </span>
+                  </div>
+                  <div style={{ ...styles.formGroup, animationDelay: "0.1s" }}>
+                    <label style={styles.label}>Store Name</label>
+                    <div style={styles.inputWrapper}>
+                      <FaStore style={styles.inputIcon} />
+                      <input
+                        type="text"
+                        name="storeName"
+                        style={{
+                          ...styles.input,
+                          borderColor:
+                            focusedField === "storeName" ? gold : "#e8dcc0",
+                        }}
+                        placeholder="e.g. Fashion Hub"
+                        value={form.storeName}
+                        onChange={handleChange}
+                        onFocus={() => setFocusedField("storeName")}
+                        onBlur={() => setFocusedField(null)}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ ...styles.formGroup, animationDelay: "0.2s" }}>
+                    <label style={styles.label}>GST IN</label>
+                    <div style={styles.inputWrapper}>
+                      <FaCheckCircle style={styles.inputIcon} />
+                      <input
+                        type="text"
+                        name="gstin"
+                        style={{
+                          ...styles.input,
+                          borderColor:
+                            focusedField === "gstin" ? gold : "#e8dcc0",
+                        }}
+                        placeholder="15-digit GST Number"
+                        value={form.gstin}
+                        onChange={handleChange}
+                        onFocus={() => setFocusedField("gstin")}
+                        onBlur={() => setFocusedField(null)}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ ...styles.formGroup, animationDelay: "0.3s" }}>
+                    <label style={styles.label}>Bank Account Number</label>
+                    <div style={styles.inputWrapper}>
+                      <FaLock style={styles.inputIcon} />
+                      <input
+                        type="text"
+                        name="bankAccount"
+                        style={{
+                          ...styles.input,
+                          borderColor:
+                            focusedField === "bankAccount" ? gold : "#e8dcc0",
+                        }}
+                        placeholder="Your Account Number"
+                        value={form.bankAccount}
+                        onChange={handleChange}
+                        onFocus={() => setFocusedField("bankAccount")}
+                        onBlur={() => setFocusedField(null)}
+                      />
+                    </div>
+                  </div>
+                  <div style={{ ...styles.formGroup, animationDelay: "0.4s" }}>
+                    <label style={styles.label}>IFSC Code</label>
+                    <div style={styles.inputWrapper}>
+                      <FaArrowRight style={styles.inputIcon} />
+                      <input
+                        type="text"
+                        name="ifscCode"
+                        style={{
+                          ...styles.input,
+                          borderColor:
+                            focusedField === "ifscCode" ? gold : "#e8dcc0",
+                        }}
+                        placeholder="e.g. SBIN0001234"
+                        value={form.ifscCode}
+                        onChange={handleChange}
+                        onFocus={() => setFocusedField("ifscCode")}
+                        onBlur={() => setFocusedField(null)}
+                      />
+                    </div>
+                  </div>
+                  <div style={styles.sellerFeatures}>
+                    <p style={styles.sellerFeaturesTitle}>
+                      As a seller, you get:
+                    </p>
+                    <ul style={{ margin: 0, padding: 0 }}>
+                      {[
+                        "List unlimited products",
+                        "Real-time sales analytics",
+                        "Competitive commission rates",
+                        "Priority seller support",
+                      ].map((item) => (
+                        <li key={item} style={styles.sellerFeatureItem}>
+                          <FaCheckCircle size={11} color={gold} /> {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </>
               )}
 
               <div style={styles.checkboxGroup}>
@@ -801,38 +840,27 @@ function Signup() {
                 />
                 <label htmlFor="agreeTerms" style={styles.checkboxLabel}>
                   I agree to the{" "}
-                  <Link to="/terms" style={styles.link}>
+                  <a href="/terms" style={styles.link}>
                     Terms &amp; Conditions
-                  </Link>
+                  </a>
                 </label>
               </div>
-
-              <button type="submit" style={styles.submitBtn}>
-                {form.isSeller ? "Create Seller Account" : "Create Account"}{" "}
-                <FaArrowRight size={11} />
+              <button
+                type="submit"
+                style={styles.submitBtn}
+                disabled={isLoading}
+              >
+                {isLoading
+                  ? "Creating Account..."
+                  : form.isSeller
+                    ? "Create Seller Account"
+                    : "Create Customer Account"}{" "}
+                {!isLoading && <FaArrowRight size={12} />}
               </button>
             </form>
-
-            <div style={styles.divider}>— or —</div>
-            <div style={styles.authLink}>
-              <Link to="/login" style={styles.authLinkText}>
-                Already have an account? <strong>Sign In</strong>
-              </Link>
-            </div>
           </div>
-
           <div style={styles.rightSection}>
-            {currentImages.map((img, index) => (
-              <img
-                key={index}
-                src={img}
-                alt={`Slide ${index + 1}`}
-                style={{
-                  ...styles.slidingImage,
-                  ...(currentImageIndex === index ? styles.activeImage : {}),
-                }}
-              />
-            ))}
+            <img src={fashionImage} alt="Fashion" style={styles.slidingImage} />
             <div style={styles.imageOverlay} />
             <div style={styles.imageShine} />
             <div style={styles.imageBadge}>
@@ -841,18 +869,6 @@ function Signup() {
                 Exclusive men's &amp; women's fashion. Be the first to explore
                 new arrivals.
               </p>
-            </div>
-            <div style={styles.dotIndicator}>
-              {currentImages.map((_, index) => (
-                <div
-                  key={index}
-                  style={{
-                    ...styles.dot,
-                    ...(currentImageIndex === index ? styles.activeDot : {}),
-                  }}
-                  onClick={() => setCurrentImageIndex(index)}
-                />
-              ))}
             </div>
           </div>
         </div>

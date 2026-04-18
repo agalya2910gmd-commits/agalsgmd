@@ -115,7 +115,7 @@ const globalCSS = `
     border-radius: 100px;
     display: flex; 
     align-items: center; 
-    gap: 10px; 
+    gap: 6px; 
     color: #1a1a1a; 
     transition: all 0.3s ease;
     font-family: 'Inter', sans-serif;
@@ -127,11 +127,11 @@ const globalCSS = `
 
   .user-dropdown {
     position: absolute; 
-    top: calc(100% + 12px); 
+  
     right: 0;
     background: #ffffff; 
     border-radius: 16px; 
-    min-width: 260px;
+    min-width: 220px;
     box-shadow: 0 20px 40px rgba(0,0,0,0.1); 
     border: 1px solid #e0e0e0;
     overflow: hidden; 
@@ -144,10 +144,10 @@ const globalCSS = `
   }
 
   .user-info {
-    padding: 20px; 
+    padding: 30px; 
     display: flex; 
     align-items: center; 
-    gap: 12px;
+    gap: 20px;
     background: linear-gradient(135deg, rgba(212, 175, 55, 0.05), rgba(184, 134, 11, 0.02));
     border-bottom: 1px solid #f0f0f0;
   }
@@ -167,14 +167,15 @@ const globalCSS = `
   .dropdown-divider { 
     height: 1px; 
     background: #f0f0f0; 
-    margin: 4px 0;
+    margin: 20px 0;
   }
 
   .dropdown-item {
-    display: flex;
-    align-items: center;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
     width: 100%;
-    padding: 12px 20px;
+    padding: 16px 24px;
     background: transparent;
     border: none;
     cursor: pointer;
@@ -183,18 +184,21 @@ const globalCSS = `
     font-family: 'Inter', sans-serif;
     font-weight: 500;
     transition: all 0.2s ease;
-    text-align: left;
-    gap: 12px;
+    text-align: center !important;
+    gap: 30px;
+    line-height: 50px;
   }
 
   .dropdown-item .item-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
     width: 20px;
-    font-size: 16px;
+    height: 20px;
+    font-size: 18px;
     color: #D4AF37;
     flex-shrink: 0;
+    margin-top: 1px;
   }
 
   .dropdown-item:hover {
@@ -250,12 +254,14 @@ const globalCSS = `
   }
 `;
 
-if (!document.getElementById("nivest-css")) {
-  const s = document.createElement("style");
-  s.id = "nivest-css";
-  s.textContent = globalCSS;
-  document.head.appendChild(s);
+const styleId = "nivest-css";
+let styleEl = document.getElementById(styleId);
+if (!styleEl) {
+  styleEl = document.createElement("style");
+  styleEl.id = styleId;
+  document.head.appendChild(styleEl);
 }
+styleEl.textContent = globalCSS;
 
 const T = {
   serif: { fontFamily: "'Playfair Display', serif" },
@@ -266,7 +272,7 @@ export default function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { getCartCount, wishlist } = useStore();
-  const { user, isAuthenticated, logout, isAdmin } = useAuth();
+  const { user, isAuthenticated, logout, isAdmin, profileImage } = useAuth();
   const [searchOpen, setSearchOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const userMenuRef = useRef(null);
@@ -276,7 +282,8 @@ export default function Navbar() {
     console.log("Navbar - User:", user);
     console.log("Navbar - isAdmin:", isAdmin);
     console.log("Navbar - isAuthenticated:", isAuthenticated);
-  }, [user, isAdmin, isAuthenticated]);
+    console.log("Navbar - profileImage exists:", !!profileImage);
+  }, [user, isAdmin, isAuthenticated, profileImage]);
 
   useEffect(() => {
     const closeMenu = (e) => {
@@ -369,7 +376,21 @@ export default function Navbar() {
                 className="user-menu-trigger"
                 onClick={() => setShowUserMenu(!showUserMenu)}
               >
-                <FaUserCircle size={22} style={{ color: "#D4AF37" }} />
+                {profileImage ? (
+                  <img
+                    src={profileImage}
+                    alt="User"
+                    style={{
+                      width: 24,
+                      height: 24,
+                      borderRadius: "50%",
+                      objectFit: "cover",
+                      border: "1.5px solid #D4AF37",
+                    }}
+                  />
+                ) : (
+                  <FaUserCircle size={22} style={{ color: "#D4AF37" }} />
+                )}
                 <span style={{ ...T.sans, fontSize: 14, fontWeight: 500 }}>
                   {user?.name?.split(" ")[0] ||
                     user?.email?.split("@")[0] ||
@@ -390,7 +411,21 @@ export default function Navbar() {
                 <div className="user-dropdown">
                   {/* User Info Header */}
                   <div className="user-info">
-                    <FaUserCircle size={44} style={{ color: "#D4AF37" }} />
+                    {profileImage ? (
+                      <img
+                        src={profileImage}
+                        alt="User Profile"
+                        style={{
+                          width: 44,
+                          height: 44,
+                          borderRadius: "50%",
+                          objectFit: "cover",
+                          border: "2px solid #D4AF37",
+                        }}
+                      />
+                    ) : (
+                      <FaUserCircle size={44} style={{ color: "#D4AF37" }} />
+                    )}
                     <div>
                       <p className="user-name-full">
                         {user?.name || user?.email}

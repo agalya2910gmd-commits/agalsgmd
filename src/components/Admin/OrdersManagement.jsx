@@ -100,11 +100,11 @@ const OrdersManagement = ({ orders, setOrders }) => {
         </div>
         <div className="order-stat-card">
           <span className="stat-label">Total Revenue</span>
-          <span className="stat-value">${totalRevenue.toLocaleString()}</span>
+          <span className="stat-value">{totalRevenue.toLocaleString()}</span>
         </div>
         <div className="order-stat-card">
           <span className="stat-label">Average Order</span>
-          <span className="stat-value">${averageOrderValue}</span>
+          <span className="stat-value">{averageOrderValue}</span>
         </div>
       </div>
 
@@ -255,7 +255,7 @@ const OrdersManagement = ({ orders, setOrders }) => {
                   </div>
                   <div className="detail-item">
                     <label>Total Amount:</label>
-                    <span>${selectedOrder.total.toFixed(2)}</span>
+                    <span>{selectedOrder.total.toFixed(2)}</span>
                   </div>
                   <div className="detail-item">
                     <label>Order Status:</label>
@@ -316,10 +316,10 @@ const OrdersManagement = ({ orders, setOrders }) => {
                       <td>Sample Product</td>
                       <td>{selectedOrder.items}</td>
                       <td>
-                        $
+                        
                         {(selectedOrder.total / selectedOrder.items).toFixed(2)}
                       </td>
-                      <td>${selectedOrder.total.toFixed(2)}</td>
+                      <td>{selectedOrder.total.toFixed(2)}</td>
                     </tr>
                   </tbody>
                 </table>

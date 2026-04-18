@@ -18,10 +18,12 @@ const OrderConfirmationPage = () => {
   const navigate = useNavigate();
   const [order, setOrder] = useState(null);
   const [deliveryDate, setDeliveryDate] = useState(null);
+  const [countdown, setCountdown] = useState(40);
 
   useEffect(() => {
     // Get the most recent order from localStorage
     const orders = JSON.parse(localStorage.getItem("orders") || "[]");
+
     if (orders.length > 0) {
       const latestOrder = orders[orders.length - 1];
       setOrder(latestOrder);
@@ -31,16 +33,32 @@ const OrderConfirmationPage = () => {
       const deliveryDateCalc = new Date(orderDate);
       deliveryDateCalc.setDate(orderDate.getDate() + 5);
       setDeliveryDate(deliveryDateCalc);
-    } else {
-      // If no order found, redirect to home
-      navigate("/");
     }
-  }, [navigate]);
+  }, []);
+
+  // Auto-redirect after 40 seconds
+  useEffect(() => {
+    if (order) {
+      const timer = setInterval(() => {
+        setCountdown((prev) => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            navigate("/shop");
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      return () => clearInterval(timer);
+    }
+  }, [order, navigate]);
 
   const handlePrint = () => {
     window.print();
   };
 
+  // Show loading state while checking for order
   if (!order) {
     return (
       <div className="loading-container">
@@ -80,6 +98,27 @@ const OrderConfirmationPage = () => {
   return (
     <div className="confirmation-page">
       <div className="container">
+        {/* Auto-redirect Countdown Bar */}
+        <div className="countdown-bar">
+          <div className="countdown-content">
+            <span>Redirecting to shop in </span>
+            <strong>{countdown}</strong>
+            <span> seconds</span>
+            <button
+              onClick={() => navigate("/shop")}
+              className="redirect-now-btn"
+            >
+              Redirect Now
+            </button>
+          </div>
+          <div className="countdown-progress">
+            <div
+              className="countdown-progress-bar"
+              style={{ width: `${(countdown / 40) * 100}%` }}
+            ></div>
+          </div>
+        </div>
+
         {/* Success Header */}
         <div className="success-header">
           <div className="success-animation">
@@ -158,6 +197,9 @@ const OrderConfirmationPage = () => {
                     {order.customerInfo?.phone}
                     <br />
                     {order.customerInfo?.email}
+                    <br />
+                    {order.customerInfo?.address}, {order.customerInfo?.city},{" "}
+                    {order.customerInfo?.zipCode}
                   </p>
                 </div>
               </div>
@@ -183,39 +225,43 @@ const OrderConfirmationPage = () => {
               <div className="col-total">Total</div>
             </div>
             <div className="table-body">
-              {order.items.map((item, idx) => (
-                <div key={idx} className="table-row">
-                  <div className="col-product">
-                    <div className="product-info">
-                      {item.image && (
-                        <img
-                          src={item.image}
-                          alt={item.name}
-                          className="product-thumb"
-                        />
-                      )}
-                      <div className="product-details">
-                        <span className="product-name">{item.name}</span>
-                        {item.size && (
-                          <span className="product-size">
-                            Size: {item.size}
-                          </span>
+              {order.items &&
+                order.items.map((item, idx) => (
+                  <div key={idx} className="table-row">
+                    <div className="col-product">
+                      <div className="product-info">
+                        {item.image && (
+                          <img
+                            src={item.image}
+                            alt={item.name}
+                            className="product-thumb"
+                            onError={(e) => {
+                              e.target.src = "https://via.placeholder.com/60";
+                            }}
+                          />
                         )}
-                        {item.color && (
-                          <span className="product-color">
-                            Color: {item.color}
-                          </span>
-                        )}
+                        <div className="product-details">
+                          <span className="product-name">{item.name}</span>
+                          {item.size && (
+                            <span className="product-size">
+                              Size: {item.size}
+                            </span>
+                          )}
+                          {item.color && (
+                            <span className="product-color">
+                              Color: {item.color}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
+                    <div className="col-price">₹{item.price.toFixed(2)}</div>
+                    <div className="col-quantity">× {item.quantity}</div>
+                    <div className="col-total">
+                      ₹{(item.price * item.quantity).toFixed(2)}
+                    </div>
                   </div>
-                  <div className="col-price">${item.price.toFixed(2)}</div>
-                  <div className="col-quantity">× {item.quantity}</div>
-                  <div className="col-total">
-                    ${(item.price * item.quantity).toFixed(2)}
-                  </div>
-                </div>
-              ))}
+                ))}
             </div>
           </div>
 
@@ -224,29 +270,29 @@ const OrderConfirmationPage = () => {
             <div className="totals-card">
               <div className="total-row">
                 <span>Subtotal:</span>
-                <span>${order.subtotal.toFixed(2)}</span>
+                <span>₹{order.subtotal?.toFixed(2)}</span>
               </div>
               <div className="total-row">
                 <span>Shipping:</span>
                 <span>
                   {order.shipping === 0
                     ? "Free"
-                    : `$${order.shipping.toFixed(2)}`}
+                    : `₹${order.shipping?.toFixed(2)}`}
                 </span>
               </div>
               <div className="total-row">
                 <span>Tax (10%):</span>
-                <span>${order.tax.toFixed(2)}</span>
+                <span>₹{order.tax?.toFixed(2)}</span>
               </div>
               {order.discount > 0 && (
                 <div className="total-row discount">
                   <span>Discount:</span>
-                  <span>-${order.discount.toFixed(2)}</span>
+                  <span>-₹{order.discount?.toFixed(2)}</span>
                 </div>
               )}
               <div className="total-row grand-total">
                 <span>Grand Total:</span>
-                <span>${order.total.toFixed(2)}</span>
+                <span>₹{order.total?.toFixed(2)}</span>
               </div>
             </div>
           </div>
@@ -347,6 +393,74 @@ const OrderConfirmationPage = () => {
           max-width: 1200px;
           margin: 0 auto;
           padding: 0 24px;
+        }
+
+        /* Countdown Bar */
+        .countdown-bar {
+          background: #1f2937;
+          border-radius: 12px;
+          margin-bottom: 32px;
+          overflow: hidden;
+          animation: slideDown 0.5s ease-out;
+        }
+
+        @keyframes slideDown {
+          from {
+            transform: translateY(-100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateY(0);
+            opacity: 1;
+          }
+        }
+
+        .countdown-content {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          padding: 16px 24px;
+          color: white;
+          font-size: 14px;
+          background: #374151;
+        }
+
+        .countdown-content strong {
+          font-size: 20px;
+          font-weight: 700;
+          color: #e6d160;
+          min-width: 30px;
+          text-align: center;
+        }
+
+        .redirect-now-btn {
+          margin-left: 16px;
+          padding: 6px 16px;
+          background: #e6d160;
+          border: none;
+          border-radius: 20px;
+          color: #1f2937;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.3s;
+          font-size: 12px;
+        }
+
+        .redirect-now-btn:hover {
+          transform: scale(1.05);
+          background: #f0e080;
+        }
+
+        .countdown-progress {
+          height: 4px;
+          background: #4b5563;
+        }
+
+        .countdown-progress-bar {
+          height: 100%;
+          background: linear-gradient(90deg, #e6d160, #f0e080);
+          transition: width 0.3s linear;
         }
 
         /* Success Header */
@@ -876,13 +990,19 @@ const OrderConfirmationPage = () => {
           .success-header h1 {
             font-size: 28px;
           }
+
+          .countdown-content {
+            font-size: 12px;
+            padding: 12px 16px;
+          }
         }
 
         @media print {
           .action-buttons,
           .help-section,
           .next-steps,
-          .view-link {
+          .view-link,
+          .countdown-bar {
             display: none;
           }
 

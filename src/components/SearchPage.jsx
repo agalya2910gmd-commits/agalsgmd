@@ -717,40 +717,40 @@ const SearchPage = () => {
         }
 
         .product-info {
-          padding: 20px;
+          padding: 12px 15px;
         }
 
         .product-category {
           font-family: 'DM Sans', sans-serif;
-          font-size: 10px;
+          font-size: 9px;
           color: #e8c97e;
           text-transform: uppercase;
           letter-spacing: 1.5px;
-          margin-bottom: 8px;
+          margin-bottom: 4px;
         }
 
         .product-name {
           font-family: 'Bebas Neue', sans-serif;
-          font-size: 20px;
+          font-size: 18px;
           font-weight: 400;
           color: #ffffff;
-          margin-bottom: 8px;
+          margin-bottom: 6px;
           letter-spacing: 0.5px;
         }
 
         .product-description {
           font-family: 'DM Sans', sans-serif;
-          font-size: 12px;
+          font-size: 11px;
           color: rgba(255, 255, 255, 0.5);
-          margin-bottom: 12px;
-          line-height: 1.4;
+          margin-bottom: 8px;
+          line-height: 1.3;
         }
 
         .product-rating {
           display: flex;
           align-items: center;
           gap: 8px;
-          margin-bottom: 12px;
+          margin-bottom: 8px;
         }
 
         .stars {
@@ -768,7 +768,7 @@ const SearchPage = () => {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          margin-bottom: 16px;
+          margin-bottom: 12px;
         }
 
         .prices {
@@ -805,8 +805,8 @@ const SearchPage = () => {
           background: transparent;
           border: 1px solid rgba(255, 255, 255, 0.2);
           color: rgba(255, 255, 255, 0.7);
-          padding: 12px;
-          font-size: 11px;
+          padding: 10px;
+          font-size: 10px;
           letter-spacing: 2px;
           text-transform: uppercase;
           cursor: pointer;

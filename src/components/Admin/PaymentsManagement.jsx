@@ -163,25 +163,25 @@ const PaymentsManagement = ({ payments, setPayments, orders }) => {
         <div className="summary-card">
           <h4>Total Revenue</h4>
           <p className="summary-amount">
-            ${(totalCompleted + totalPending).toLocaleString()}
+            {(totalCompleted + totalPending).toLocaleString()}
           </p>
         </div>
         <div className="summary-card">
           <h4>Completed Payments</h4>
           <p className="summary-amount success">
-            ${totalCompleted.toLocaleString()}
+            {totalCompleted.toLocaleString()}
           </p>
         </div>
         <div className="summary-card">
           <h4>Pending Payments</h4>
           <p className="summary-amount warning">
-            ${totalPending.toLocaleString()}
+            {totalPending.toLocaleString()}
           </p>
         </div>
         <div className="summary-card">
           <h4>Refunded Amount</h4>
           <p className="summary-amount refunded">
-            ${totalRefunded.toLocaleString()}
+            {totalRefunded.toLocaleString()}
           </p>
         </div>
       </div>
@@ -214,7 +214,7 @@ const PaymentsManagement = ({ payments, setPayments, orders }) => {
                   <td>#{item.orderId}</td>
                   <td>{item.customer}</td>
                   <td className="amount-cell">
-                    ${item.amount.toLocaleString()}
+                    {item.amount.toLocaleString()}
                   </td>
                   <td>
                     <span className="payment-method">
@@ -298,7 +298,7 @@ const PaymentsManagement = ({ payments, setPayments, orders }) => {
                 </div>
                 <div className="detail-item">
                   <label>Amount:</label>
-                  <span>${selectedPayment.amount.toLocaleString()}</span>
+                  <span>{selectedPayment.amount.toLocaleString()}</span>
                 </div>
                 <div className="detail-item">
                   <label>Payment Method:</label>
