@@ -369,7 +369,7 @@ function Signup() {
     input: {
       width: "100%",
       padding: "0.8rem 1rem 0.8rem 2.75rem",
-      border: `1.5px solid ${focusedField ? gold : "#e8dcc0"}`,
+      border: `1.5px solid #e8dcc0`,
       borderRadius: "14px",
       fontSize: "0.85rem",
       transition: "all 0.2s ease",
@@ -557,7 +557,7 @@ function Signup() {
                     name="name"
                     style={{
                       ...styles.input,
-                      borderColor: focusedField === "name" ? gold : "#e8dcc0",
+                      border: `1.5px solid ${focusedField === "name" ? gold : "#e8dcc0"}`,
                     }}
                     placeholder="John Doe"
                     value={form.name}
@@ -576,7 +576,7 @@ function Signup() {
                     name="email"
                     style={{
                       ...styles.input,
-                      borderColor: focusedField === "email" ? gold : "#e8dcc0",
+                      border: `1.5px solid ${focusedField === "email" ? gold : "#e8dcc0"}`,
                     }}
                     placeholder="hello@example.com"
                     value={form.email}
@@ -595,8 +595,7 @@ function Signup() {
                     name="password"
                     style={{
                       ...styles.input,
-                      borderColor:
-                        focusedField === "password" ? gold : "#e8dcc0",
+                      border: `1.5px solid ${focusedField === "password" ? gold : "#e8dcc0"}`,
                     }}
                     placeholder="Min. 6 characters"
                     value={form.password}
@@ -626,11 +625,7 @@ function Signup() {
                     name="confirmPassword"
                     style={{
                       ...styles.input,
-                      borderColor: confirmPasswordError
-                        ? "#e53e3e"
-                        : focusedField === "confirm"
-                          ? gold
-                          : "#e8dcc0",
+                      border: `1.5px solid ${confirmPasswordError ? "#e53e3e" : focusedField === "confirm" ? gold : "#e8dcc0"}`,
                     }}
                     placeholder="Repeat password"
                     value={form.confirmPassword}
@@ -664,8 +659,7 @@ function Signup() {
                         name="dob"
                         style={{
                           ...styles.input,
-                          borderColor:
-                            focusedField === "dob" ? gold : "#e8dcc0",
+                          border: `1.5px solid ${focusedField === "dob" ? gold : "#e8dcc0"}`,
                         }}
                         value={form.dob}
                         onChange={handleChange}
@@ -682,8 +676,7 @@ function Signup() {
                         name="gender"
                         style={{
                           ...styles.input,
-                          borderColor:
-                            focusedField === "gender" ? gold : "#e8dcc0",
+                          border: `1.5px solid ${focusedField === "gender" ? gold : "#e8dcc0"}`,
                           appearance: "none",
                         }}
                         value={form.gender}
@@ -738,8 +731,7 @@ function Signup() {
                         name="storeName"
                         style={{
                           ...styles.input,
-                          borderColor:
-                            focusedField === "storeName" ? gold : "#e8dcc0",
+                          border: `1.5px solid ${focusedField === "storeName" ? gold : "#e8dcc0"}`,
                         }}
                         placeholder="e.g. Fashion Hub"
                         value={form.storeName}
@@ -758,8 +750,7 @@ function Signup() {
                         name="gstin"
                         style={{
                           ...styles.input,
-                          borderColor:
-                            focusedField === "gstin" ? gold : "#e8dcc0",
+                          border: `1.5px solid ${focusedField === "gstin" ? gold : "#e8dcc0"}`,
                         }}
                         placeholder="15-digit GST Number"
                         value={form.gstin}
@@ -778,8 +769,7 @@ function Signup() {
                         name="bankAccount"
                         style={{
                           ...styles.input,
-                          borderColor:
-                            focusedField === "bankAccount" ? gold : "#e8dcc0",
+                          border: `1.5px solid ${focusedField === "bankAccount" ? gold : "#e8dcc0"}`,
                         }}
                         placeholder="Your Account Number"
                         value={form.bankAccount}
@@ -798,8 +788,7 @@ function Signup() {
                         name="ifscCode"
                         style={{
                           ...styles.input,
-                          borderColor:
-                            focusedField === "ifscCode" ? gold : "#e8dcc0",
+                          border: `1.5px solid ${focusedField === "ifscCode" ? gold : "#e8dcc0"}`,
                         }}
                         placeholder="e.g. SBIN0001234"
                         value={form.ifscCode}

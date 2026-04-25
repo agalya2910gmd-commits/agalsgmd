@@ -41,17 +41,43 @@ const OrdersManagement = ({ orders, setOrders }) => {
     }
   };
 
-  const updateOrderStatus = (orderId, newStatus) => {
-    setOrders(
-      orders.map((order) =>
-        order.id === orderId ? { ...order, status: newStatus } : order,
-      ),
-    );
+  const updateOrderStatus = async (orderId, newStatus) => {
+    try {
+      const response = await fetch(`http://localhost:5000/api/orders/${orderId}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      if (!response.ok) throw new Error("Failed to update order status");
+
+      setOrders(
+        orders.map((order) =>
+          order.id === orderId ? { ...order, status: newStatus } : order,
+        ),
+      );
+      alert(`Order #${orderId} status updated to ${newStatus}`);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to update order status");
+    }
   };
 
-  const deleteOrder = (orderId) => {
+  const deleteOrder = async (orderId) => {
     if (window.confirm("Are you sure you want to delete this order?")) {
-      setOrders(orders.filter((order) => order.id !== orderId));
+      try {
+        const response = await fetch(`http://localhost:5000/api/admin/orders/${orderId}`, {
+          method: "DELETE"
+        });
+
+        if (!response.ok) throw new Error("Failed to delete order");
+
+        setOrders(orders.filter((order) => order.id !== orderId));
+        alert(`Order #${orderId} deleted successfully`);
+      } catch (err) {
+        console.error(err);
+        alert("Failed to delete order");
+      }
     }
   };
 
@@ -100,7 +126,7 @@ const OrdersManagement = ({ orders, setOrders }) => {
         </div>
         <div className="order-stat-card">
           <span className="stat-label">Total Revenue</span>
-          <span className="stat-value">{totalRevenue.toLocaleString()}</span>
+          <span className="stat-value">₹{totalRevenue.toLocaleString()}</span>
         </div>
         <div className="order-stat-card">
           <span className="stat-label">Average Order</span>
@@ -170,10 +196,13 @@ const OrdersManagement = ({ orders, setOrders }) => {
               {filteredOrders.map((order) => (
                 <tr key={order.id} className="order-row">
                   <td className="order-id-cell">#{order.id}</td>
-                  <td className="customer-cell">{order.customer}</td>
+                  <td className="customer-cell">
+                    <div style={{ fontWeight: "600" }}>{order.customer}</div>
+                    <div style={{ fontSize: "10px", color: "#666" }}>Seller: {order.seller_name || order.seller_id || "Direct"}</div>
+                  </td>
                   <td>{order.date}</td>
                   <td>{order.items} items</td>
-                  <td className="amount-cell">${order.total.toFixed(2)}</td>
+                  <td className="amount-cell">₹{order.total.toFixed(2)}</td>
                   <td>
                     <span
                       className="order-status-badge"
@@ -255,7 +284,7 @@ const OrdersManagement = ({ orders, setOrders }) => {
                   </div>
                   <div className="detail-item">
                     <label>Total Amount:</label>
-                    <span>{selectedOrder.total.toFixed(2)}</span>
+                    <span>₹{selectedOrder.total.toFixed(2)}</span>
                   </div>
                   <div className="detail-item">
                     <label>Order Status:</label>

@@ -89,7 +89,12 @@ export function AuthProvider({ children }) {
     setProfileImage(null);
     localStorage.removeItem("nivest_user");
     localStorage.removeItem("nivest_user_type");
-    // DON'T clear onboarding data - keep it for each seller
+    
+    // Clear user-specific locally stored images or other metadata if needed
+    // But don't clear onboarding data - keep it for each seller
+    
+    // Refresh page to reset all contexts to their initial guest state
+    window.location.href = "/login";
   };
 
   const isSeller = user?.isSeller === true || user?.role === "seller";

@@ -4,7 +4,9 @@ import {
   Routes,
   Route,
   useLocation,
+  Navigate,
 } from "react-router-dom";
+import { useAuth } from "./context/AuthContext";
 import { StoreProvider } from "./context/StoreContext";
 import { AuthProvider } from "./context/AuthContext";
 import { ProductProvider } from "./context/ProductContext";
@@ -34,6 +36,12 @@ import SellerDashboardWrapper from "./components/SellerDashboardWrapper"; // Cha
 import AdminDashboard from "./components/Admin/AdminDashboard";
 
 function HomePage() {
+  const { userType, isAuthenticated } = useAuth();
+
+  if (isAuthenticated && userType === "seller") {
+    return <Navigate to="/seller-dashboard" replace />;
+  }
+
   return (
     <>
       <div className="hero-navbar-wrapper">

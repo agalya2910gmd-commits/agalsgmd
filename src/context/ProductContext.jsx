@@ -28,20 +28,22 @@ export function normalizeSubCategoryForShop(category, subCategory) {
   const cat = normalizeCategoryForShop(category);
   const sub = (subCategory || "").trim().toLowerCase();
   
-  // High priority user-requested mappings
-  if (sub.includes("shirt")) return "Shirts";
+  // High priority specific mappings
+  if (sub === "t-shirt" || sub === "tshirt" || sub.includes("t-shirt") || sub.includes("tshirt")) return "T-Shirts";
+  if (sub.includes("printed shirt")) return "Printed Shirts";
   if (sub.includes("saree")) return "Saree";
+  if (sub.includes("western dress")) return "Western Dress";
+  if (sub.includes("jewelry") || sub.includes("jewel")) return "Jewelry";
   if (sub.includes("sandal")) return "Sandals";
-  if (sub.includes("accessor")) return "Accessories";
-  if (sub.includes("men")) return "Men Fashion";
-  if (sub.includes("women")) return "Women Fashion";
-
-  // Existing cases
-  if (sub === "t-shirt" || sub === "tshirt") return "T-Shirts";
-  if (sub === "pants" || sub === "pant") return "Pants";
+  if (sub.includes("pant") || sub.includes("chino") || sub.includes("jeans")) return "Pants";
+  if (sub.includes("shirt")) return "Shirts"; // Lower priority catch-all for shirts
   
-  // Fallback: Title Case
-  return subCategory ? subCategory.charAt(0).toUpperCase() + subCategory.slice(1).toLowerCase() : "";
+  // Title Case for others
+  return subCategory 
+    ? subCategory.split(' ')
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+        .join(' ')
+    : "";
 }
 
 // ─── PROVIDER ─────────────────────────────────────────────────────────────────
@@ -58,13 +60,40 @@ export const ProductProvider = ({ children }) => {
       const contentType = response.headers.get("content-type");
       if (response.ok && contentType && contentType.includes("application/json")) {
         const data = await response.json();
-        const normalized = data.map(p => ({
-          ...p,
-          sellerAdded: true,
-          subCategory: p.subcategory,
-          image: p.image.startsWith("/") ? `http://localhost:5000${p.image}` : p.image,
-          price: typeof p.price === 'string' ? p.price : `₹${parseFloat(p.price).toLocaleString("en-IN")}`,
-        }));
+        console.log(`[ProductContext] API returned ${data.length} raw products. Syncing state...`);
+        console.log("[ProductContext DEBUG] First product seller_id:", data[0]?.seller_id);
+        const normalized = data.map(p => {
+          const mainImage = p.image?.startsWith("/") ? `http://localhost:5000${p.image}` : (p.image || "");
+          const formattedPrice = `₹${parseFloat(p.price || 0).toLocaleString("en-IN")}`;
+          const formattedMRP = `₹${parseFloat(p.mrp || p.price || 0).toLocaleString("en-IN")}`;
+          
+          // Normalize category and subcategory to match ShopPage filters
+          const normalizedCategory = normalizeCategoryForShop(p.category);
+          const normalizedSubCategory = normalizeSubCategoryForShop(p.category, p.subcategory);
+          
+          return {
+            ...p,
+            sellerAdded: true,
+            category: normalizedCategory,
+            subCategory: normalizedSubCategory,
+            originalSubCategory: p.subcategory, // Keep original for reference if needed
+            image: mainImage,
+            images: [mainImage],
+            price: formattedPrice,
+            originalPrice: formattedMRP,
+            rating: p.rating || 4.5,
+            reviews: p.reviews || Math.floor(Math.random() * 200) + 50,
+            tag: p.tag || "NEW IN",
+            discount: p.offers || p.offer || p.discount || "",
+            offer: p.offers || p.offer || p.discount || "",
+            colors: p.available_colors ? p.available_colors.split(',').map(s => s.trim()) : ["Standard"],
+            colorNames: p.available_colors ? p.available_colors.split(',').map(s => s.trim()) : ["Standard"],
+            sizes: p.available_sizes ? p.available_sizes.split(',').map(s => s.trim()) : ["S", "M", "L", "XL"],
+            highlights: p.description ? [p.description.substring(0, 100) + "..."] : ["Premium quality product"],
+            reviewsList: [] 
+          };
+        });
+        console.log(`[ProductContext] Normalized ${normalized.length} products for Shop visibility`);
         setProducts(normalized);
         return normalized;
       } else if (!response.ok) {
@@ -84,25 +113,43 @@ export const ProductProvider = ({ children }) => {
 
   const addProduct = async (productData, sellerId) => {
     try {
+      console.log(`[ProductContext] STEP 1: Starting addProduct for ${productData.name}`);
       const formData = new FormData();
       formData.append("name", productData.name);
       formData.append("price", productData.price);
       formData.append("description", productData.description || "");
-      formData.append("seller_id", sellerId || productData.seller_id || 1);
+      
+      const finalSellerId = sellerId || productData.seller_id;
+      console.log(`[ProductContext] STEP 2: Using seller_id: ${finalSellerId}`);
+      if (finalSellerId) {
+        formData.append("seller_id", finalSellerId);
+      }
+      
       formData.append("category", productData.category);
-      formData.append("subcategory", normalizeSubCategoryForShop(productData.category, productData.subCategory));
+      try {
+        const sub = normalizeSubCategoryForShop(productData.category, productData.subCategory);
+        formData.append("subcategory", sub);
+      } catch (e) {
+        console.warn("[ProductContext] Normalization failed:", e.message);
+        formData.append("subcategory", productData.subCategory || "");
+      }
+      
       formData.append("stock", productData.stock || 0);
 
       // Append new fields
       const newFields = [
         "parent_product_id", "category_id", "review_id", "sku", "mrp", "stock_quantity",
         "weight", "length", "breadth", "height", "brand", "image_url",
-        "variant_name", "variant_value", "is_variant", "is_active"
+        "variant_name", "variant_value", "is_variant", "is_active",
+        "available_sizes", "available_colors", "coupon_details", "offers", "measurements"
       ];
 
       newFields.forEach(field => {
-        if (productData[field] !== undefined && productData[field] !== null) {
-          formData.append(field, productData[field]);
+        const val = productData[field];
+        if (val !== undefined && val !== null) {
+          formData.append(field, val);
+        } else if (field === 'offers' && productData.discount) {
+          formData.append('offers', productData.discount);
         }
       });
 
@@ -112,36 +159,32 @@ export const ProductProvider = ({ children }) => {
         formData.append("image", productData.image);
       }
 
+      console.log(`[ProductContext] STEP 3: Sending POST to http://localhost:5000/api/products`);
       const response = await fetch("http://localhost:5000/api/products", {
         method: "POST",
         body: formData,
       });
 
+      console.log(`[ProductContext] STEP 4: Response received (Status: ${response.status})`);
       const contentType = response.headers.get("content-type");
+      
       if (!response.ok) {
         let errorMessage = `Server error (${response.status})`;
         if (contentType && contentType.includes("application/json")) {
           const err = await response.json();
           errorMessage = err.message || errorMessage;
         }
+        console.error(`[ProductContext] STEP 5: Failure`, errorMessage);
         throw new Error(errorMessage);
       }
 
-      if (contentType && contentType.includes("application/json")) {
-        const result = await response.json();
-        const newProduct = {
-          ...result.product,
-          sellerAdded: true,
-          image: result.product.image?.startsWith("/") ? `http://localhost:5000${result.product.image}` : result.product.image,
-          price: `₹${parseFloat(result.product.price).toLocaleString("en-IN")}`,
-          subCategory: result.product.subcategory
-        };
-        
-        setProducts((prev) => [newProduct, ...prev]);
-        return newProduct;
-      } else {
-        throw new Error("Unexpected response from server (Not JSON)");
-      }
+      const result = await response.json();
+      console.log(`[ProductContext] STEP 6: Success! Syncing...`);
+      
+      await new Promise(resolve => setTimeout(resolve, 500));
+      await fetchProducts(); 
+      console.log("[ProductContext] STEP 7: Global state synchronized.");        
+      return result.product;
     } catch (error) {
       console.error("Error adding product:", error);
       throw error;
@@ -218,6 +261,7 @@ export const ProductProvider = ({ children }) => {
         updateProduct,
         deleteProduct,
         getProductById,
+        fetchProducts,
       }}
     >
       {children}

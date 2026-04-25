@@ -42,7 +42,7 @@ const SellerDashboardWrapper = () => {
     }
   }, [user, isAuthenticated, authLoading]);
 
-  const handleOnboardingComplete = (formData) => {
+  const handleOnboardingComplete = async (formData) => {
     try {
       if (!user || !user.email) return;
 
@@ -51,6 +51,22 @@ const SellerDashboardWrapper = () => {
 
       localStorage.setItem(userOnboardedKey, "true");
       localStorage.setItem(userDataKey, JSON.stringify(formData));
+
+      // Persist to backend
+      try {
+        await fetch("http://localhost:5000/api/seller/onboarding", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            sellerId: user.id,
+            formData: formData
+          }),
+        });
+      } catch (err) {
+        console.error("Failed to save onboarding to backend:", err);
+      }
 
       console.log("Onboarding saved for:", user.email);
 

@@ -42,7 +42,11 @@ import {
   FaLayerGroup,
   FaRuler,
   FaWeight,
+  FaFileContract,
+  FaDownload,
 } from "react-icons/fa";
+import jsPDF from "jspdf";
+import html2canvas from "html2canvas";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useStore } from "../context/StoreContext";
@@ -369,6 +373,37 @@ const dashboardCSS = `
   .page-btn.active { background: #b3934e; color: white; border-color: #b3934e; }
   .page-btn:disabled { opacity: 0.5; cursor: not-allowed; }
   .page-info { color: #6b7280; font-size: 13px; }
+
+  .action-buttons {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+  }
+  .action-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 10px;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    background: #fff;
+    border: 1px solid #f1f5f9;
+    flex-shrink: 0;
+  }
+  .action-btn.view { color: #3b82f6; }
+  .action-btn.view:hover { background: #eff6ff; border-color: #3b82f6; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15); }
+  .action-btn.edit { color: #10b981; }
+  .action-btn.edit:hover { background: #f0fdf4; border-color: #10b981; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15); }
+  .action-btn.delete { color: #ef4444; }
+  .action-btn.delete:hover { background: #fef2f2; border-color: #ef4444; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(239, 68, 68, 0.15); }
 
   /* ══════════════════════════════════════════════════════════
      ADD PRODUCT PAGE — Full redesign matching screenshot
@@ -1330,14 +1365,18 @@ const PLACEHOLDER_IMG =
 // ─── HELPERS (stable, module-level) ──────────────────────────────────────────
 const getAvatarColor = (name) =>
   AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length];
-const parsePriceToNumber = (v) =>
-  parseInt(String(v).replace(/[^0-9]/g, "")) || 0;
+const parsePriceToNumber = (priceStr) => {
+  if (!priceStr) return 0;
+  if (typeof priceStr === "number") return priceStr;
+  return Number(priceStr.toString().replace(/[^0-9.]/g, ""));
+};
+
 const formatToINR = (n) => `₹${n.toLocaleString("en-IN")}`;
 
 const getDeletedStatic = () => {
   try {
     return JSON.parse(localStorage.getItem("deletedStaticProducts") || "[]");
-  } catch {
+  } catch (e) {
     return [];
   }
 };
@@ -1506,66 +1545,137 @@ const APImageUpload = memo(({ imagePreview, onUrlChange, onFileUpload }) => {
 
 // ─── ANALYTICS TAB ─────────────────────────────────────────────────────────────
 const AnalyticsTabComponent = () => {
+  const { user } = useAuth();
   const [timeRange, setTimeRange] = useState("weekly");
   const [yearlyHalf, setYearlyHalf] = useState("firstHalf");
-  const weeklyData = [3400, 4200, 5100, 4800, 6200, 7800, 9100, 8500];
-  const monthlyData = [
-    5800, 7200, 9100, 11200, 8900, 12400, 13500, 14800, 16200, 17100, 18500,
-    19800,
-  ];
-  const yearlyData = [
-    15000, 22000, 28000, 35000, 42000, 48000, 52000, 58000, 63000, 69000, 74000,
-    78000,
-  ];
+  const [revenueData, setRevenueData] = useState([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const reportRef = useRef(null);
+
+  const handleDownloadPDF = async () => {
+    if (!reportRef.current) return;
+    
+    try {
+      setIsLoading(true);
+      const canvas = await html2canvas(reportRef.current, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: "#f4f6f9"
+      });
+      
+      const imgData = canvas.toDataURL("image/png");
+      const pdf = new jsPDF("p", "mm", "a4");
+      const imgProps = pdf.getImageProperties(imgData);
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+      
+      // Add Title
+      pdf.setFontSize(18);
+      pdf.setTextColor(30, 41, 59);
+      pdf.text("NIVEST Seller Analytics Report", 15, 20);
+      
+      // Add Timestamp
+      pdf.setFontSize(10);
+      pdf.setTextColor(100, 116, 139);
+      pdf.text(`Generated on: ${new Date().toLocaleString()}`, 15, 28);
+      
+      // Add Chart Image
+      pdf.addImage(imgData, "PNG", 10, 35, pdfWidth - 20, pdfHeight - 20);
+      
+      pdf.save(`Analytics_Report_${user?.name || 'Seller'}_${new Date().toISOString().split('T')[0]}.pdf`);
+    } catch (err) {
+      console.error("PDF Generation Error:", err);
+      alert("Failed to generate PDF. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      if (!user?.id) return;
+      setIsLoading(true);
+      try {
+        const response = await fetch(`http://localhost:5000/api/seller/analytics/${user.id}?period=${timeRange}`);
+        if (response.ok) {
+          const data = await response.json();
+          setRevenueData(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch seller analytics:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchAnalytics();
+  }, [user?.id, timeRange]);
+
   const MONTH_LABELS = [
-    "Jan",
-    "Feb",
-    "Mar",
-    "Apr",
-    "May",
-    "Jun",
-    "Jul",
-    "Aug",
-    "Sep",
-    "Oct",
-    "Nov",
-    "Dec",
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun", 
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
   ];
 
   const currentData = useMemo(() => {
-    if (timeRange === "weekly")
-      return weeklyData.map((v, i) => ({
-        label: `W${i + 1}`,
-        revenue: v,
-        orders: Math.floor(v / 50),
-      }));
-    if (timeRange === "monthly")
-      return monthlyData.map((v, i) => ({
-        label: MONTH_LABELS[i],
-        revenue: v,
-        orders: Math.floor(v / 60),
-      }));
-    const half =
-      yearlyHalf === "firstHalf"
-        ? yearlyData.slice(0, 6)
-        : yearlyData.slice(6, 12);
-    const offset = yearlyHalf === "firstHalf" ? 0 : 6;
-    return half.map((v, i) => ({
-      label: MONTH_LABELS[i + offset],
-      revenue: v,
-      orders: Math.floor(v / 70),
+    let labels = [];
+    let revenueValues = [];
+    let ordersArr = [];
+
+    if (timeRange === "weekly") {
+      const maxWeek = Math.max(...revenueData.map(d => parseInt(d.label)), 4);
+      const minWeek = Math.max(1, maxWeek - 7);
+      for (let i = minWeek; i <= maxWeek; i++) {
+        labels.push(`W${i}`);
+        const match = revenueData.find(d => parseInt(d.label) === i);
+        const val = match ? parseFloat(match.value) : 0;
+        revenueValues.push(val);
+        ordersArr.push(Math.floor(val / 50));
+      }
+    } else if (timeRange === "monthly") {
+      for (let i = 1; i <= 12; i++) {
+        labels.push(MONTH_LABELS[i-1]);
+        const match = revenueData.find(d => parseInt(d.label) === i);
+        const val = match ? parseFloat(match.value) : 0;
+        revenueValues.push(val);
+        ordersArr.push(Math.floor(val / 60));
+      }
+    } else if (timeRange === "quarterly") {
+      for (let i = 1; i <= 4; i++) {
+        labels.push(`Q${i}`);
+        const match = revenueData.find(d => parseInt(d.label) === i);
+        const val = match ? parseFloat(match.value) : 0;
+        revenueValues.push(val);
+        ordersArr.push(Math.floor(val / 100));
+      }
+    } else {
+      // Yearly
+      const currentYear = new Date().getFullYear();
+      for (let i = currentYear - 2; i <= currentYear; i++) {
+        labels.push(i.toString());
+        const match = revenueData.find(d => parseInt(d.label) === i);
+        const val = match ? parseFloat(match.value) : 0;
+        revenueValues.push(val);
+        ordersArr.push(Math.floor(val / 500));
+      }
+    }
+
+    return labels.map((label, idx) => ({
+      label,
+      revenue: revenueValues[idx],
+      orders: ordersArr[idx]
     }));
-  }, [timeRange, yearlyHalf]);
+  }, [revenueData, timeRange]);
 
   const maxRevenue = useMemo(
-    () => Math.max(...currentData.map((d) => d.revenue)),
+    () => Math.max(...currentData.map((d) => d.revenue), 1),
     [currentData],
   );
   const totalRev = currentData.reduce((s, d) => s + d.revenue, 0);
-  const avgRev = Math.floor(totalRev / currentData.length);
+  const avgRev = Math.floor(totalRev / Math.max(currentData.length, 1));
 
   return (
-    <>
+    <div className="analytics-tab" style={{ animation: "fadeInUp 0.4s ease-out" }}>
       <div className="sd-ph">
         <div>
           <p className="sd-pt">Performance Analytics</p>
@@ -1573,9 +1683,30 @@ const AnalyticsTabComponent = () => {
             Deep insights into your store's revenue trends
           </p>
         </div>
-        <div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "flex-end" }}>
+          <button
+            onClick={handleDownloadPDF}
+            disabled={isLoading}
+            style={{
+              padding: "10px 20px",
+              borderRadius: 8,
+              border: "none",
+              background: "linear-gradient(135deg, #1e293b, #334155)",
+              color: "white",
+              fontWeight: 700,
+              fontSize: 13,
+              cursor: isLoading ? "not-allowed" : "pointer",
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
+              transition: "all 0.3s ease"
+            }}
+          >
+            <FaDownload /> {isLoading ? "Generating..." : "Download PDF"}
+          </button>
           <div style={{ display: "flex", gap: 8 }}>
-            {["weekly", "monthly", "yearly"].map((p) => (
+            {["weekly", "monthly", "quarterly", "yearly"].map((p) => (
               <button
                 key={p}
                 onClick={() => setTimeRange(p)}
@@ -1598,7 +1729,7 @@ const AnalyticsTabComponent = () => {
             ))}
           </div>
           {timeRange === "yearly" && (
-            <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+            <div style={{ display: "flex", gap: 8 }}>
               {[
                 ["firstHalf", "Jan - Jun"],
                 ["secondHalf", "Jul - Dec"],
@@ -1627,7 +1758,9 @@ const AnalyticsTabComponent = () => {
           )}
         </div>
       </div>
-      <div className="row g-3 mb-4">
+      
+      <div ref={reportRef} style={{ padding: "5px" }}>
+        <div className="row g-3 mb-4">
         {[
           { v: `₹${totalRev.toLocaleString()}`, l: "Total Revenue" },
           { v: `₹${avgRev.toLocaleString()}`, l: "Average Revenue" },
@@ -1688,7 +1821,8 @@ const AnalyticsTabComponent = () => {
           </div>
         </div>
       </div>
-    </>
+    </div>
+  </div>
   );
 };
 
@@ -1697,22 +1831,36 @@ const SellerDashboard = () => {
   const navigate = useNavigate();
   const { user, isAuthenticated, logout } = useAuth();
   const {
-    products: sellerProducts,
+    products,
     addProduct,
     updateProduct,
     deleteProduct,
+    fetchProducts,
   } = useProducts();
+  const sellerProducts = products;
 
   const [activeTab, setActiveTab] = useState("overview");
 
   // Products
-  const [allProducts, setAllProducts] = useState(() => {
-    const deleted = getDeletedStatic();
-    const available = (STATIC_PRODUCTS || []).filter(
-      (p) => !deleted.includes(p.id),
-    );
-    return available.map((p) => ({ ...p, isStatic: true }));
-  });
+  // ─── Products Logic (Centralized from Context) ──────────────────────────────
+  const [deletedStaticIds, setDeletedStaticIds] = useState(() => getDeletedStatic());
+  
+  const allProducts = useMemo(() => {
+    // 1. Filter and normalize static products
+    const availableStatic = (STATIC_PRODUCTS || [])
+      .filter((p) => !deletedStaticIds.includes(p.id))
+      // Only show generic static products or those explicitly assigned to this seller
+      .filter((p) => !p.seller_id || String(p.seller_id) === String(user?.id))
+      .map((p) => ({ ...p, isStatic: true }));
+
+    // 2. Filter context products to only show THIS seller's items
+    const sellerOnlyProducts = products
+      .filter((p) => String(p.seller_id) === String(user?.id))
+      .map((p) => ({ ...p, isStatic: false }));
+      
+    // 3. Return Combined List (Seller products FIRST for maximum visibility)
+    return [...sellerOnlyProducts, ...availableStatic];
+  }, [products, user?.id, deletedStaticIds]);
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -1751,14 +1899,33 @@ const SellerDashboard = () => {
       is_active: true,
       parent_product_id: "",
       category_id: "",
+      available_sizes: "",
+      available_colors: "",
+      coupon_details: "",
+      offers: "",
+      measurements: "",
     }),
     [],
   );
 
+  // State for dashboard data
   const [productForm, setProductForm] = useState(EMPTY_FORM);
-  const [orders, setOrders] = useState(INITIAL_ORDERS);
-  const [returns, setReturns] = useState(INITIAL_RETURNS);
-  const [reviews, setReviews] = useState(INITIAL_REVIEWS);
+  
+  // Initialize and filter Orders, Returns, and Reviews by current seller
+  const [orders, setOrders] = useState([]);
+  const [allGlobalOrders, setAllGlobalOrders] = useState([]);
+
+  const [returns, setReturns] = useState(() => {
+    const myOrderIds = INITIAL_ORDERS
+      .filter(o => {
+        const myProductNames = sellerProducts.map(p => p.name.toLowerCase());
+        return myProductNames.includes(o.product.split('×')[0].trim().toLowerCase());
+      })
+      .map(o => o.id);
+    return INITIAL_RETURNS.filter(r => myOrderIds.includes(r.orderId));
+  });
+
+  const [reviews, setReviews] = useState([]);
   const [orderFilter, setOrderFilter] = useState("All");
   const [returnFilter, setReturnFilter] = useState("All");
   const [showUserMenu, setShowUserMenu] = useState(false);
@@ -1787,19 +1954,80 @@ const SellerDashboard = () => {
   const userMenuRef = useRef(null);
   const toastTimerRef = useRef(null);
 
-  // Sync seller products into allProducts without re-adding statics
+  // Force re-fetch from backend on initial mount to ensure stale local caches are bypassed
   useEffect(() => {
-    const deleted = getDeletedStatic();
-    const availableStatic = (STATIC_PRODUCTS || [])
-      .filter((p) => !deleted.includes(p.id))
-      .map((p) => ({ ...p, isStatic: true }));
+    if (isAuthenticated) {
+      console.log("[SellerDashboard] Synchronizing products with backend...");
+      fetchProducts();
+    }
+  }, [isAuthenticated, fetchProducts]);
 
-    const sellerWithFlag = sellerProducts.map((p) => ({
-      ...p,
-      isStatic: false,
-    }));
-    setAllProducts([...availableStatic, ...sellerWithFlag]);
-  }, [sellerProducts]);
+  // Load real orders from storage/API and filter for the current seller
+  useEffect(() => {
+    const fetchAndFilterOrders = () => {
+      // 1. Fetch all orders (from localStorage as the global repository)
+      const globalOrders = JSON.parse(localStorage.getItem("orders") || "[]");
+      setAllGlobalOrders(globalOrders);
+
+      // 2. Map and Split Logic
+      const sellerViewOfOrders = globalOrders.map(order => {
+        // Filter items that belong to THIS seller
+        const myItems = (order.items || []).filter(item => {
+          // Priority 1: Direct seller_id link on the item
+          if (item.seller_id && String(item.seller_id) === String(user?.id)) return true;
+          
+          // Priority 2: Lookup in context products if seller_id is missing (placeholder or static products)
+          const productMatch = products.find(p => String(p.id) === String(item.id) || p.name === item.name);
+          return productMatch && String(productMatch.seller_id) === String(user?.id);
+        });
+
+        // If this seller has items in the order, return a split view of it
+        if (myItems.length > 0) {
+          const sellerSubtotal = myItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+          return {
+            ...order,
+            // Keep original ID/Metadata but overwrite items and totals for this seller's view
+            id: order.id,
+            displayId: order.orderNumber || `#${order.id}`,
+            customer: order.customerInfo?.fullName || order.customer || "Unknown",
+            customerEmail: order.customerInfo?.email || order.email || "N/A",
+            city: order.customerInfo?.city || order.city || "Unknown City",
+            itemsList: myItems.map(i => `${i.name} × ${i.quantity}`).join(", "),
+            items: myItems.length,
+            total: sellerSubtotal, // Seller only sees their revenue share
+            fullOrderTotal: order.total,
+            status: order.status || "Pending",
+            payment: order.paymentStatus || order.payment || "Pending",
+            date: new Date(order.orderDate || order.date).toISOString().split('T')[0]
+          };
+        }
+        return null;
+      }).filter(Boolean); // Remove orders that don't belong to this seller
+
+      setOrders(sellerViewOfOrders);
+
+      // 3. Similarly filter Returns based on filtered order IDs
+      const myOrderIds = sellerViewOfOrders.map(o => o.id);
+      const filteredReturns = INITIAL_RETURNS.filter(r => myOrderIds.includes(r.orderId));
+      setReturns(filteredReturns);
+
+      // 4. Fetch real reviews from API
+      const fetchSellerReviews = async () => {
+        try {
+          const response = await fetch(`http://localhost:5000/api/seller/reviews/${user?.id}`);
+          if (response.ok) {
+            const data = await response.json();
+            setReviews(data);
+          }
+        } catch (err) {
+          console.error("Failed to fetch seller reviews:", err);
+        }
+      };
+      fetchSellerReviews();
+    };
+
+    fetchAndFilterOrders();
+  }, [user?.id, allProducts, sellerProducts]);
 
   useEffect(() => {
     if (!isAuthenticated) navigate("/login");
@@ -1818,6 +2046,24 @@ const SellerDashboard = () => {
     setCurrentPage(1);
   }, [selectedCategory]);
 
+  const [realSellerStats, setRealSellerStats] = useState(null);
+
+  useEffect(() => {
+    const fetchSellerStats = async () => {
+      if (!user?.id) return;
+      try {
+        const response = await fetch(`http://localhost:5000/api/seller/stats/${user.id}`);
+        if (response.ok) {
+          const data = await response.json();
+          setRealSellerStats(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch seller stats:", err);
+      }
+    };
+    fetchSellerStats();
+  }, [user?.id]);
+
   const notify = useCallback((msg, type = "success") => {
     clearTimeout(toastTimerRef.current);
     setToast({ msg, type });
@@ -1826,10 +2072,10 @@ const SellerDashboard = () => {
 
   // ── Derived stats ──────────────────────────────────────────────────────────
   const stats = useMemo(() => {
-    const totalRevenue = orders.reduce((s, o) => s + o.total, 0);
-    const totalSales = orders.length;
-    const totalProducts = allProducts.length;
-    const lowStockCount = allProducts.filter(
+    const totalRevenue = realSellerStats ? realSellerStats.totalRevenue : orders.reduce((s, o) => s + o.total, 0);
+    const totalSales = realSellerStats ? realSellerStats.totalSales : orders.length;
+    const totalProducts = realSellerStats ? realSellerStats.totalProducts : allProducts.length;
+    const lowStockCount = realSellerStats ? realSellerStats.lowStockCount : allProducts.filter(
       (p) => p.stock > 0 && p.stock <= 10,
     ).length;
     const avgRating =
@@ -1841,6 +2087,14 @@ const SellerDashboard = () => {
     const pendingCount = orders.filter((o) =>
       ["Pending", "Processing"].includes(o.status),
     ).length;
+
+    // Monthly breakdown for charts
+    const monthlyData = new Array(6).fill(0);
+    orders.forEach(o => {
+      const month = new Date(o.date).getMonth();
+      if (month < 6) monthlyData[month] += o.total;
+    });
+
     return {
       totalRevenue,
       totalSales,
@@ -1848,8 +2102,9 @@ const SellerDashboard = () => {
       lowStockCount,
       avgRating,
       pendingCount,
+      monthlyData
     };
-  }, [orders, allProducts, reviews]);
+  }, [orders, allProducts, reviews, realSellerStats]);
 
   const filteredProducts = useMemo(
     () =>
@@ -2036,6 +2291,11 @@ const SellerDashboard = () => {
       is_active: product.is_active !== undefined ? product.is_active : true,
       parent_product_id: product.parent_product_id || "",
       category_id: product.category_id || "",
+      available_sizes: product.available_sizes || "",
+      available_colors: product.available_colors || "",
+      coupon_details: typeof product.coupon_details === 'object' ? JSON.stringify(product.coupon_details) : (product.coupon_details || ""),
+      offers: product.offers || "",
+      measurements: product.measurements || "",
     });
     setImagePreview(product.image || "");
     setShowProductModal(true);
@@ -2137,7 +2397,7 @@ const SellerDashboard = () => {
                 .filter(Boolean)
             : [],
         stock: parseInt(stock) || 0,
-        seller_id: user?.id || 1,
+        seller_id: user?.id, // Link strictly to logged-in user
         sku: productForm.sku || null,
         mrp: parseFloat(productForm.mrp) || null,
         brand: productForm.brand || null,
@@ -2147,10 +2407,12 @@ const SellerDashboard = () => {
         height: parseFloat(productForm.height) || null,
         variant_name: productForm.variant_name || null,
         variant_value: productForm.variant_value || null,
-        is_variant: productForm.is_variant,
         is_active: productForm.is_active,
         parent_product_id: parseInt(productForm.parent_product_id) || null,
         category_id: parseInt(productForm.category_id) || null,
+        offers: productForm.offers || productForm.discount || null,
+        available_colors: productForm.available_colors || (Array.isArray(productForm.colors) ? productForm.colors.join(',') : productForm.colors) || "",
+        available_sizes: productForm.available_sizes || "",
       };
 
       if (editingProduct) {
@@ -2159,6 +2421,11 @@ const SellerDashboard = () => {
       } else {
         await addProduct(productData, user?.id);
         notify("Product added successfully!");
+      }
+
+      // Refresh product list immediately across all pages
+      if (typeof fetchProducts === 'function') {
+        fetchProducts();
       }
 
       setShowProductModal(false);
@@ -2195,9 +2462,7 @@ const SellerDashboard = () => {
             JSON.stringify([...deleted, productToDelete.id]),
           );
         }
-        setAllProducts((prev) =>
-          prev.filter((p) => p.id !== productToDelete.id),
-        );
+        setDeletedStaticIds(getDeletedStatic());
         notify("Static product deleted successfully!");
       } else {
         await deleteProduct(productToDelete.id);
@@ -2213,12 +2478,22 @@ const SellerDashboard = () => {
 
   const updateOrderStatus = useCallback(
     (id, status) => {
+      // 1. Update local state
       setOrders((prev) =>
         prev.map((o) => (o.id === id ? { ...o, status } : o)),
       );
       setSelectedOrder((prev) =>
         prev && prev.id === id ? { ...prev, status } : prev,
       );
+
+      // 2. Persist to global storage (localStorage)
+      const globalOrders = JSON.parse(localStorage.getItem("orders") || "[]");
+      const updatedGlobal = globalOrders.map(o => 
+        String(o.id) === String(id) ? { ...o, status } : o
+      );
+      localStorage.setItem("orders", JSON.stringify(updatedGlobal));
+      setAllGlobalOrders(updatedGlobal);
+
       notify(`Order ${id} → ${status}`);
     },
     [notify],
@@ -2339,6 +2614,11 @@ const SellerDashboard = () => {
             key: "analytics",
             icon: <FaChartLine size={16} />,
             label: "Analytics",
+          },
+          {
+            key: "terms",
+            icon: <FaFileContract size={16} />,
+            label: "Terms & Conditions",
           },
         ].map(({ key, icon, label, badge, badgeDanger }) => (
           <button
@@ -2700,8 +2980,7 @@ const SellerDashboard = () => {
                 <th>Subcategory</th>
                 <th>Price</th>
                 <th>Stock</th>
-                <th>Rating</th>
-                <th>Actions</th>
+                <th style={{ textAlign: "center", minWidth: "140px" }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -2729,30 +3008,47 @@ const SellerDashboard = () => {
                         {product.stock || 0}
                       </span>
                     </td>
-                    <td>
-                      <span style={{ color: "#f59e0b" }}>★</span>{" "}
-                      {product.rating || "N/A"}
-                    </td>
-                    <td>
-                      <button
-                        className="edit-btn"
-                        onClick={() => handleEditProduct(product)}
-                      >
-                        <FaEdit size={12} /> Edit
-                      </button>
-                      <button
-                        className="delete-btn"
-                        onClick={() => confirmDelete(product)}
-                      >
-                        <FaTrash size={12} /> Delete
-                      </button>
+                    <td style={{ whiteSpace: "nowrap", minWidth: "140px", textAlign: "center" }}>
+                      <div className="action-buttons">
+                        <button
+                          className="action-btn view"
+                          title="View Product"
+                          onClick={() => {
+                            setEditingProduct(product);
+                            setProductForm({
+                              ...product,
+                              price: parsePriceToNumber(product.price).toString(),
+                              originalPrice: parsePriceToNumber(product.originalPrice).toString(),
+                            });
+                            setImagePreview(product.image || "");
+                            setShowProductModal(true);
+                            // Set read-only or similar if possible, but keeping logic same as edit for now
+                          }}
+                        >
+                          <FaEye size={16} />
+                        </button>
+                        <button
+                          className="action-btn edit"
+                          title="Edit Product"
+                          onClick={() => handleEditProduct(product)}
+                        >
+                          <FaEdit size={16} />
+                        </button>
+                        <button
+                          className="action-btn delete"
+                          title="Delete Product"
+                          onClick={() => confirmDelete(product)}
+                        >
+                          <FaTrash size={16} />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))
               ) : (
                 <tr>
                   <td
-                    colSpan="8"
+                    colSpan="7"
                     style={{ textAlign: "center", padding: "40px" }}
                   >
                     No products found in this category.
@@ -3286,7 +3582,7 @@ const SellerDashboard = () => {
                             style={{
                               padding: "5px 12px",
                               fontSize: 11,
-                              borderColor: "#ef4444",
+                              border: "1.5px solid #ef4444",
                               color: "#ef4444",
                             }}
                             onClick={() => {
@@ -3398,7 +3694,7 @@ const SellerDashboard = () => {
               </div>
               <div style={{ padding: "20px" }}>
                 <div className="chart-bars">
-                  {YEARLY_REVENUE_FIRST.map((v, i) => (
+                  {(stats.monthlyData || new Array(6).fill(0)).map((v, i) => (
                     <div className="chart-col" key={i}>
                       <div
                         style={{
@@ -3407,11 +3703,11 @@ const SellerDashboard = () => {
                           fontWeight: 700,
                         }}
                       >
-                        ₹{Math.floor(v / 1000)}k
+                        {v >= 1000 ? `₹${(v / 1000).toFixed(1)}k` : `₹${v}`}
                       </div>
                       <div
                         className="chart-bar"
-                        style={{ height: `${(v / 20000) * 130}px` }}
+                        style={{ height: `${stats.totalRevenue > 0 ? (v / stats.totalRevenue) * 130 + 10 : 10}px` }}
                       />
                       <div className="chart-lbl">
                         {["Jan", "Feb", "Mar", "Apr", "May", "Jun"][i]}
@@ -3875,6 +4171,88 @@ const SellerDashboard = () => {
       submitReply,
     ],
   );
+
+  const [termsAccepted, setTermsAccepted] = useState(false);
+  const TermsTab = useMemo(() => (
+    <div className="terms-tab" style={{ animation: "fadeInUp 0.4s ease-out" }}>
+      <div className="sd-ph">
+        <div>
+          <p className="sd-pt">Terms & Conditions</p>
+          <p className="sd-ps">Please read and accept our seller policies</p>
+        </div>
+      </div>
+      
+      <div className="dashboard-card" style={{ padding: "30px", background: "#fff", borderRadius: "12px", boxShadow: "0 4px 20px rgba(0,0,0,0.05)" }}>
+        <div style={{ 
+          maxHeight: "500px", 
+          overflowY: "auto", 
+          paddingRight: "15px",
+          marginBottom: "30px",
+          color: "#475569",
+          lineHeight: "1.7"
+        }}>
+          <h4 style={{ color: "#1e293b", marginBottom: "20px", fontWeight: 700 }}>Seller Agreement</h4>
+          <p>Welcome to the NIVEST Seller Community. By listing your products on our platform, you agree to abide by the following terms and conditions:</p>
+          
+          <ul style={{ paddingLeft: "20px", marginTop: "15px" }}>
+            <li style={{ marginBottom: "12px" }}><strong>Accurate Product Details:</strong> Sellers must provide true and accurate information regarding product features, sizes, colors, and conditions.</li>
+            <li style={{ marginBottom: "12px" }}><strong>Listing Quality:</strong> No fake, duplicate, or misleading listings are allowed. High-quality images are mandatory.</li>
+            <li style={{ marginBottom: "12px" }}><strong>Order Processing:</strong> All orders must be processed and handed over to delivery partners within the specified timeframe (usually 24-48 hours).</li>
+            <li style={{ marginBottom: "12px" }}><strong>Financial Settlements:</strong> Payments for successful deliveries will be settled into your bank account after the return window (7 days) has closed.</li>
+            <li style={{ marginBottom: "12px" }}><strong>Customer Policy:</strong> Return and refund policies as defined by NIVEST must be strictly followed by all sellers.</li>
+            <li style={{ marginBottom: "12px" }}><strong>Prohibited Items:</strong> Any item listed that violates local laws or platform guidelines will be removed immediately.</li>
+          </ul>
+          
+          <p style={{ marginTop: "20px" }}>We reserve the right to suspend or terminate seller accounts that repeatedly violate these terms or receive poor customer feedback.</p>
+        </div>
+
+        <div style={{ 
+          borderTop: "1px solid #f1f5f9", 
+          paddingTop: "25px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "20px"
+        }}>
+          <label style={{ display: "flex", alignItems: "center", gap: "12px", cursor: "pointer", userSelect: "none" }}>
+            <input 
+              type="checkbox" 
+              checked={termsAccepted}
+              onChange={(e) => setTermsAccepted(e.target.checked)}
+              style={{ width: "20px", height: "20px", cursor: "pointer", accentColor: "#b3934e" }}
+            />
+            <span style={{ fontSize: "14px", fontWeight: 500, color: "#1e293b" }}>
+              I agree to the Terms & Conditions and understand my responsibilities as a seller.
+            </span>
+          </label>
+
+          <button
+            onClick={() => {
+              if (termsAccepted) {
+                notify("Terms & Conditions accepted successfully!");
+              } else {
+                notify("Please check the agreement box first.", "error");
+              }
+            }}
+            style={{
+              padding: "12px 30px",
+              background: termsAccepted ? "linear-gradient(135deg, #b3934e, #d4af6a)" : "#cbd5e1",
+              color: "white",
+              border: "none",
+              borderRadius: "8px",
+              fontWeight: 700,
+              fontSize: "15px",
+              cursor: termsAccepted ? "pointer" : "not-allowed",
+              alignSelf: "flex-start",
+              transition: "all 0.3s ease",
+              boxShadow: termsAccepted ? "0 4px 12px rgba(179, 147, 78, 0.25)" : "none"
+            }}
+          >
+            Accept Agreement
+          </button>
+        </div>
+      </div>
+    </div>
+  ), [termsAccepted, notify]);
 
   // ── DRAWERS ────────────────────────────────────────────────────────────────
   const SlideDrawer = useMemo(
@@ -4586,6 +4964,84 @@ const SellerDashboard = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Advanced Details */}
+              <div className="ap-card">
+                <div className="ap-card-header">
+                  <div className="ap-card-icon">
+                    <FaTags size={14} />
+                  </div>
+                  <div>
+                    <p className="ap-card-title">Advanced Details</p>
+                    <p className="ap-card-subtitle">
+                      Sizes, colors, coupons, and specifications
+                    </p>
+                  </div>
+                </div>
+                <div className="ap-card-body">
+                  <div className="ap-row ap-row-2">
+                    <div className="ap-field-group" style={{ margin: 0 }}>
+                      <label className="ap-label">Available Sizes</label>
+                      <input
+                        type="text"
+                        name="available_sizes"
+                        className="ap-input"
+                        value={productForm.available_sizes}
+                        onChange={handleInputChange}
+                        placeholder="e.g. S, M, L, XL"
+                      />
+                    </div>
+                    <div className="ap-field-group" style={{ margin: 0 }}>
+                      <label className="ap-label">Available Colors</label>
+                      <input
+                        type="text"
+                        name="available_colors"
+                        className="ap-input"
+                        value={productForm.available_colors}
+                        onChange={handleInputChange}
+                        placeholder="e.g. Red, Blue, Black"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="ap-row ap-row-2" style={{ marginTop: 14 }}>
+                    <div className="ap-field-group" style={{ margin: 0 }}>
+                      <label className="ap-label">Coupon Details</label>
+                      <input
+                        type="text"
+                        name="coupon_details"
+                        className="ap-input"
+                        value={productForm.coupon_details}
+                        onChange={handleInputChange}
+                        placeholder='e.g. {"code": "SAVE10", "discount": 10}'
+                      />
+                    </div>
+                    <div className="ap-field-group" style={{ margin: 0 }}>
+                      <label className="ap-label">Offers / Discounts</label>
+                      <input
+                        type="text"
+                        name="offers"
+                        className="ap-input"
+                        value={productForm.offers}
+                        onChange={handleInputChange}
+                        placeholder="e.g. Buy 1 Get 1"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="ap-field-group" style={{ marginTop: 14 }}>
+                    <label className="ap-label">Measurements / Specifications</label>
+                    <textarea
+                      name="measurements"
+                      className="ap-textarea"
+                      value={productForm.measurements}
+                      onChange={handleInputChange}
+                      placeholder="Enter detailed measurements or specifications..."
+                      rows={3}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* RIGHT COLUMN */}
@@ -4852,7 +5308,7 @@ const SellerDashboard = () => {
                 <button
                   className="sd-dropdown-btn"
                   onClick={handleLogout}
-                  style={{ color: "#dc2626", borderTop: "1px solid #e9ecef" }}
+                  style={{ color: "#dc2626", borderTop: "1px solid #e9ecef", borderLeft: "none", borderRight: "none", borderBottom: "none" }}
                 >
                   <FaSignOutAlt size={14} /> Logout
                 </button>
@@ -4874,6 +5330,7 @@ const SellerDashboard = () => {
               {activeTab === "payments" && PaymentsTab}
               {activeTab === "reviews" && ReviewsTab}
               {activeTab === "analytics" && <AnalyticsTabComponent />}
+              {activeTab === "terms" && TermsTab}
             </div>
           </div>
         </div>

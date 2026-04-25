@@ -71,9 +71,6 @@ const CartPage = () => {
   const handleWishlistToggle = (item) => {
     if (isInWishlist(item.id, item.size)) {
       removeFromWishlist(item.id, item.size);
-      setWishlistNotificationMessage(`${item.name} removed from wishlist`);
-      setShowWishlistNotification(true);
-      setTimeout(() => setShowWishlistNotification(false), 2000);
     } else {
       addToWishlist({
         id: item.id,
@@ -83,16 +80,10 @@ const CartPage = () => {
         size: item.size,
         category: item.category,
       });
-      setWishlistNotificationMessage(`${item.name} added to wishlist`);
-      setShowWishlistNotification(true);
-      setTimeout(() => setShowWishlistNotification(false), 2000);
     }
   };
 
-  const [showWishlistNotification, setShowWishlistNotification] =
-    useState(false);
-  const [wishlistNotificationMessage, setWishlistNotificationMessage] =
-    useState("");
+
 
   if (cart.length === 0) {
     return (
@@ -190,14 +181,7 @@ const CartPage = () => {
   return (
     <div className="cart-page">
       <div className="container">
-        {showWishlistNotification && (
-          <div className="wishlist-notification">
-            <FaHeart className="notification-icon" />
-            <div className="notification-content">
-              <p>{wishlistNotificationMessage}</p>
-            </div>
-          </div>
-        )}
+
 
         <div className="cart-header">
           <Link to="/products" className="back-link">

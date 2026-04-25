@@ -1,609 +1,576 @@
 // src/components/Admin/Analytics.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { 
+  Users, 
+  ShoppingBag, 
+  Package, 
+  TrendingUp, 
+  DollarSign, 
+  ArrowUpRight,
+  Filter
+} from "lucide-react";
 
-const Analytics = ({ stats, orders, products, payments }) => {
-  const [timeRange, setTimeRange] = useState("yearly");
-  const [viewMode, setViewMode] = useState("all");
+const Analytics = ({ stats: initialStats, orders = [], products = [], payments = [] }) => {
+  const [timeRange, setTimeRange] = useState("monthly");
+  const [revenueData, setRevenueData] = useState({
+    labels: [],
+    revenue: [],
+    orders: []
+  });
+  const [generalStats, setGeneralStats] = useState({
+    totalUsers: 0,
+    totalOrders: 0,
+    totalProducts: 0,
+    totalRevenue: 0
+  });
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const averageOrderValue =
-    stats.totalOrders > 0
-      ? (stats.totalRevenue / stats.totalOrders).toFixed(2)
-      : 0;
+  useEffect(() => {
+    const fetchData = async () => {
+      setIsLoading(true);
+      setError(null);
+      try {
+        const [statsRes, revenueRes] = await Promise.all([
+          fetch("http://localhost:5000/api/admin/general-stats"),
+          fetch(`http://localhost:5000/api/analytics/revenue?period=${timeRange}`)
+        ]);
 
-  const recentOrders = orders.slice(0, 5);
-  const lowStockProducts = products.filter((p) => p.stock < 10);
-
-  // Yearly data with monthly breakdown
-  const yearlyData = {
-    labels: ["2022", "2023", "2024"],
-    revenue: [189000, 245000, 312000],
-    orders: [1890, 2450, 3120],
-    monthlyBreakdown: {
-      2022: {
-        first6: [85000, 104000],
-        last6: [104000, 85000],
-        labels: ["Jan-Jun", "Jul-Dec"],
-      },
-      2023: {
-        first6: [112000, 133000],
-        last6: [133000, 112000],
-        labels: ["Jan-Jun", "Jul-Dec"],
-      },
-      2024: {
-        first6: [148000, 164000],
-        last6: [164000, 148000],
-        labels: ["Jan-Jun", "Jul-Dec"],
-      },
-    },
-  };
-
-  // Monthly data (12 months)
-  const monthlyData = {
-    labels: [
-      "Jan",
-      "Feb",
-      "Mar",
-      "Apr",
-      "May",
-      "Jun",
-      "Jul",
-      "Aug",
-      "Sep",
-      "Oct",
-      "Nov",
-      "Dec",
-    ],
-    revenue: [
-      12500, 15200, 16800, 18200, 21000, 23500, 25600, 27800, 29100, 30500,
-      31800, 33500,
-    ],
-    orders: [125, 152, 168, 182, 210, 235, 256, 278, 291, 305, 318, 335],
-  };
-
-  // Weekly data (last 4 weeks)
-  const weeklyData = {
-    labels: ["Week 1", "Week 2", "Week 3", "Week 4"],
-    revenue: [5800, 7200, 6900, 8500],
-    orders: [58, 72, 69, 85],
-  };
-
-  // Get current data based on time range
-  const getCurrentData = () => {
-    switch (timeRange) {
-      case "weekly":
-        return weeklyData;
-      case "monthly":
-        return monthlyData;
-      case "yearly":
-      default:
-        if (viewMode === "first6") {
-          return {
-            labels: yearlyData.labels,
-            revenue: yearlyData.revenue.map(
-              (_, idx) =>
-                yearlyData.monthlyBreakdown[yearlyData.labels[idx]].first6[0],
-            ),
-            orders: yearlyData.orders.map((_, idx) =>
-              Math.floor(yearlyData.orders[idx] * 0.45),
-            ),
-            subtitle: "First 6 Months (Jan - Jun)",
-          };
-        } else if (viewMode === "last6") {
-          return {
-            labels: yearlyData.labels,
-            revenue: yearlyData.revenue.map(
-              (_, idx) =>
-                yearlyData.monthlyBreakdown[yearlyData.labels[idx]].last6[0],
-            ),
-            orders: yearlyData.orders.map((_, idx) =>
-              Math.floor(yearlyData.orders[idx] * 0.55),
-            ),
-            subtitle: "Last 6 Months (Jul - Dec)",
-          };
+        if (!statsRes.ok || !revenueRes.ok) {
+          throw new Error("Failed to fetch analytics data");
         }
-        return yearlyData;
-    }
-  };
 
-  const currentData = getCurrentData();
-  const maxRevenue = Math.max(...currentData.revenue);
-  const maxOrders = Math.max(...currentData.orders);
+        const statsData = await statsRes.json();
+        const rawRevenueData = await revenueRes.json();
 
-  // Calculate category distribution
-  const categoryStats = products.reduce((acc, product) => {
+        setGeneralStats({
+          totalUsers: statsData.totalUsers || 0,
+          totalOrders: statsData.totalOrders || 0,
+          totalProducts: statsData.totalProducts || 0,
+          totalRevenue: statsData.totalRevenue || 0
+        });
+
+        let labels = [];
+        let revenue = [];
+        let ordersArr = [];
+
+        if (timeRange === 'monthly') {
+          labels = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+          revenue = new Array(12).fill(0);
+          ordersArr = new Array(12).fill(0);
+          rawRevenueData.forEach(d => {
+            const idx = parseInt(d.label) - 1;
+            if (idx >= 0 && idx < 12) {
+              revenue[idx] = parseFloat(d.value);
+              ordersArr[idx] = Math.floor(parseFloat(d.value) / 100) || 0;
+            }
+          });
+        } else if (timeRange === 'weekly') {
+          const maxWeek = Math.max(...rawRevenueData.map(d => parseInt(d.label)), 4);
+          const minWeek = Math.max(1, maxWeek - 7);
+          for (let i = minWeek; i <= maxWeek; i++) {
+            labels.push(`Week ${i}`);
+            const match = rawRevenueData.find(d => parseInt(d.label) === i);
+            revenue.push(match ? parseFloat(match.value) : 0);
+            ordersArr.push(match ? Math.floor(parseFloat(match.value) / 100) : 0);
+          }
+        } else if (timeRange === 'quarterly') {
+          labels = ["Q1", "Q2", "Q3", "Q4"];
+          revenue = new Array(4).fill(0);
+          ordersArr = new Array(4).fill(0);
+          rawRevenueData.forEach(d => {
+            const idx = parseInt(d.label) - 1;
+            if (idx >= 0 && idx < 4) {
+              revenue[idx] = parseFloat(d.value);
+              ordersArr[idx] = Math.floor(parseFloat(d.value) / 100) || 0;
+            }
+          });
+        } else {
+          const currentYear = new Date().getFullYear();
+          for (let i = currentYear - 2; i <= currentYear; i++) {
+            labels.push(i.toString());
+            const match = rawRevenueData.find(d => parseInt(d.label) === i);
+            revenue.push(match ? parseFloat(match.value) : 0);
+            ordersArr.push(match ? Math.floor(parseFloat(match.value) / 100) : 0);
+          }
+        }
+
+        setRevenueData({ labels, revenue, orders: ordersArr });
+      } catch (err) {
+        console.error("Analytics fetch error:", err);
+        setError("Failed to load analytics");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [timeRange]);
+
+  const recentOrders = Array.isArray(orders) ? orders.slice(0, 6) : [];
+  
+  const currentData = revenueData.labels.length > 0 ? revenueData : { labels: ["No Data"], revenue: [0], orders: [0] };
+  const maxRevenue = Math.max(...currentData.revenue, 1);
+  const maxOrdersCount = Math.max(...currentData.orders, 1);
+
+  const categoryStats = Array.isArray(products) ? products.reduce((acc, product) => {
     acc[product.category] = (acc[product.category] || 0) + 1;
     return acc;
-  }, {});
+  }, {}) : {};
 
-  const totalProducts = products.length;
-  const categoryPercentages = Object.entries(categoryStats).map(
-    ([category, count]) => ({
+  const totalProductsCount = products.length || 1;
+  const categoryPercentages = Object.entries(categoryStats)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5)
+    .map(([category, count]) => ({
       category,
-      percentage: ((count / totalProducts) * 100).toFixed(1),
-    }),
-  );
+      percentage: ((count / totalProductsCount) * 100).toFixed(1),
+    }));
 
   const styles = {
-    container: {
-      padding: "16px",
-      height: "100%",
-      overflow: "hidden",
+    dashboard: {
+      padding: "24px",
+      background: "#f8fafc",
+      minHeight: "100%",
+      fontFamily: "'Inter', sans-serif",
     },
     header: {
-      marginBottom: "16px",
-    },
-    title: {
-      fontSize: "18px",
-      fontWeight: "600",
-      color: "#1a1a2e",
-      margin: "0 0 12px 0",
-    },
-    timeRangeButtons: {
       display: "flex",
-      gap: "10px",
-      marginBottom: "16px",
-      flexWrap: "wrap",
+      justifyContent: "space-between",
+      alignItems: "center",
+      marginBottom: "32px",
     },
-    timeBtn: {
-      padding: "6px 16px",
-      border: "1px solid #e9ecef",
-      background: "white",
+    headerTitle: {
+      margin: 0,
+      fontSize: "28px",
+      fontWeight: "800",
+      color: "#0f172a",
+      letterSpacing: "-0.02em",
+    },
+    headerSubtitle: {
+      margin: "4px 0 0 0",
+      fontSize: "14px",
+      color: "#64748b",
+    },
+    filterGroup: {
+      display: "flex",
+      background: "#fff",
+      padding: "4px",
+      borderRadius: "12px",
+      boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
+      border: "1px solid #e2e8f0",
+    },
+    filterBtn: {
+      padding: "8px 16px",
+      border: "none",
+      background: "transparent",
       borderRadius: "8px",
+      fontSize: "13px",
+      fontWeight: "600",
+      color: "#64748b",
       cursor: "pointer",
-      fontSize: "12px",
-      fontWeight: "500",
-      transition: "all 0.3s ease",
+      transition: "all 0.2s cubic-bezier(0.4, 0, 0.2, 1)",
     },
-    timeBtnActive: {
-      background: "#1a1a2e",
-      color: "white",
-      borderColor: "#1a1a2e",
-    },
-    viewModeButtons: {
-      display: "flex",
-      gap: "8px",
-      marginBottom: "16px",
-      flexWrap: "wrap",
-    },
-    viewBtn: {
-      padding: "4px 12px",
-      border: "1px solid #e9ecef",
-      background: "white",
-      borderRadius: "6px",
-      cursor: "pointer",
-      fontSize: "11px",
-      fontWeight: "500",
-      transition: "all 0.3s ease",
-    },
-    viewBtnActive: {
-      background: "#1a1a2e",
-      color: "white",
-      borderColor: "#1a1a2e",
+    filterBtnActive: {
+      background: "#0f172a",
+      color: "#fff",
+      boxShadow: "0 4px 12px rgba(15, 23, 42, 0.15)",
     },
     statsGrid: {
       display: "grid",
-      gridTemplateColumns: "repeat(3, 1fr)",
-      gap: "12px",
-      marginBottom: "20px",
+      gridTemplateColumns: "repeat(4, 1fr)",
+      gap: "24px",
+      marginBottom: "32px",
     },
-    statCard: {
-      background: "linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)",
-      padding: "14px",
-      borderRadius: "12px",
-      textAlign: "center",
-      color: "white",
+    card: {
+      background: "#fff",
+      padding: "24px",
+      borderRadius: "20px",
+      border: "1px solid #e2e8f0",
+      boxShadow: "0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03)",
+      transition: "transform 0.2s ease, box-shadow 0.2s ease",
+      cursor: "default",
     },
-    statLabel: {
-      fontSize: "11px",
-      opacity: 0.8,
-      marginBottom: "6px",
-      textTransform: "uppercase",
-    },
-    statValue: {
-      fontSize: "22px",
-      fontWeight: "700",
-    },
-    warningValue: {
-      color: "#f59e0b",
-    },
-    chartSection: {
-      background: "white",
-      borderRadius: "12px",
-      padding: "16px",
-      marginBottom: "20px",
-      border: "1px solid #e9ecef",
-    },
-    chartTitle: {
-      fontSize: "14px",
-      fontWeight: "600",
-      color: "#1a1a2e",
-      marginBottom: "8px",
-    },
-    chartSubtitle: {
-      fontSize: "11px",
-      color: "#6c757d",
+    cardIcon: {
+      width: "48px",
+      height: "48px",
+      borderRadius: "14px",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
       marginBottom: "16px",
     },
-    chartContainer: {
-      overflowX: "auto",
+    cardLabel: {
+      fontSize: "14px",
+      fontWeight: "600",
+      color: "#64748b",
+      marginBottom: "4px",
     },
-    barChart: {
+    cardValue: {
+      fontSize: "28px",
+      fontWeight: "800",
+      color: "#0f172a",
+      display: "flex",
+      alignItems: "baseline",
+      gap: "4px",
+    },
+    cardTrend: {
+      fontSize: "12px",
+      fontWeight: "700",
+      color: "#10b981",
+      display: "flex",
+      alignItems: "center",
+      gap: "2px",
+      marginTop: "8px",
+    },
+    chartsGrid: {
+      display: "grid",
+      gridTemplateColumns: "repeat(2, 1fr)",
+      gap: "24px",
+      marginBottom: "32px",
+    },
+    chartCard: {
+      background: "#fff",
+      padding: "24px",
+      borderRadius: "24px",
+      border: "1px solid #e2e8f0",
+      boxShadow: "0 10px 15px -3px rgba(0,0,0,0.05)",
+    },
+    chartHeader: {
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+      marginBottom: "24px",
+    },
+    chartTitle: {
+      margin: 0,
+      fontSize: "18px",
+      fontWeight: "700",
+      color: "#1e293b",
+    },
+    chartVisual: {
+      height: "220px",
       display: "flex",
       alignItems: "flex-end",
-      gap: "20px",
-      minWidth: "300px",
-      height: "200px",
+      gap: "12px",
+      paddingTop: "20px",
     },
-    barWrapper: {
+    barGroup: {
       flex: 1,
       display: "flex",
       flexDirection: "column",
       alignItems: "center",
-      gap: "8px",
+      height: "100%",
+      justifyContent: "flex-end",
     },
-    barContainer: {
+    bar: {
       width: "100%",
-      height: "160px",
-      display: "flex",
-      alignItems: "flex-end",
-      justifyContent: "center",
-      gap: "4px",
-    },
-    revenueBar: {
-      width: "35px",
-      background: "linear-gradient(180deg, #4facfe 0%, #00f2fe 100%)",
-      borderRadius: "4px 4px 0 0",
-      transition: "height 0.5s ease",
-    },
-    ordersBar: {
-      width: "35px",
-      background: "linear-gradient(180deg, #43e97b 0%, #38f9d7 100%)",
-      borderRadius: "4px 4px 0 0",
-      transition: "height 0.5s ease",
+      maxWidth: "32px",
+      borderRadius: "6px 6px 2px 2px",
+      transition: "all 0.6s cubic-bezier(0.34, 1.56, 0.64, 1)",
+      position: "relative",
     },
     barLabel: {
+      marginTop: "12px",
       fontSize: "11px",
       fontWeight: "600",
-      color: "#1a1a2e",
-      textAlign: "center",
+      color: "#94a3b8",
     },
-    barValue: {
-      fontSize: "10px",
-      fontWeight: "500",
-      color: "#4a5568",
-      marginBottom: "4px",
-    },
-    analyticsSections: {
+    tableSection: {
       display: "grid",
-      gridTemplateColumns: "1fr 1fr",
-      gap: "16px",
+      gridTemplateColumns: "1.5fr 1fr",
+      gap: "24px",
     },
-    recentOrders: {
-      background: "white",
-      borderRadius: "12px",
-      padding: "16px",
-      border: "1px solid #e9ecef",
+    tableCard: {
+      background: "#fff",
+      borderRadius: "24px",
+      border: "1px solid #e2e8f0",
+      overflow: "hidden",
     },
-    sectionTitle: {
-      fontSize: "14px",
-      fontWeight: "600",
-      color: "#1a1a2e",
-      marginBottom: "12px",
+    tableHeader: {
+      padding: "20px 24px",
+      borderBottom: "1px solid #f1f5f9",
+      display: "flex",
+      justifyContent: "space-between",
+      alignItems: "center",
     },
     table: {
       width: "100%",
       borderCollapse: "collapse",
     },
-    tableHeader: {
-      padding: "8px",
+    th: {
       textAlign: "left",
-      fontSize: "11px",
+      padding: "16px 24px",
+      fontSize: "12px",
+      fontWeight: "700",
+      color: "#64748b",
+      textTransform: "uppercase",
+      background: "#f8fafc",
+    },
+    td: {
+      padding: "16px 24px",
+      fontSize: "14px",
+      color: "#334155",
+      borderBottom: "1px solid #f1f5f9",
+    },
+    badge: {
+      padding: "4px 10px",
+      borderRadius: "20px",
+      fontSize: "12px",
       fontWeight: "600",
-      color: "#6c757d",
-      borderBottom: "1px solid #e9ecef",
     },
-    tableCell: {
-      padding: "8px",
-      fontSize: "12px",
-      color: "#4a5568",
-      borderBottom: "1px solid #e9ecef",
+    progressContainer: {
+      padding: "24px",
     },
-    statusText: {
-      fontWeight: "500",
+    progressItem: {
+      marginBottom: "20px",
     },
-    categoryPerformance: {
-      background: "white",
-      borderRadius: "12px",
-      padding: "16px",
-      border: "1px solid #e9ecef",
-    },
-    categoryList: {
+    progressLabel: {
       display: "flex",
-      flexDirection: "column",
-      gap: "12px",
-    },
-    categoryItem: {
-      display: "flex",
-      alignItems: "center",
-      gap: "10px",
-    },
-    categoryName: {
-      width: "100px",
-      fontSize: "12px",
-      fontWeight: "500",
-      color: "#4a5568",
+      justifyContent: "space-between",
+      marginBottom: "8px",
+      fontSize: "13px",
+      fontWeight: "600",
+      color: "#334155",
     },
     progressBar: {
-      flex: 1,
-      height: "6px",
-      background: "#e9ecef",
-      borderRadius: "3px",
+      height: "8px",
+      background: "#f1f5f9",
+      borderRadius: "4px",
       overflow: "hidden",
     },
-    progress: {
+    progressFill: {
       height: "100%",
-      background: "linear-gradient(90deg, #667eea, #764ba2)",
-      borderRadius: "3px",
-      transition: "width 0.3s ease",
-    },
-    percentage: {
-      width: "45px",
-      fontSize: "11px",
-      fontWeight: "600",
-      color: "#1a1a2e",
+      borderRadius: "4px",
+      transition: "width 1s ease-out",
     },
   };
 
+  if (isLoading) {
+    return (
+      <div style={{ ...styles.dashboard, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center' }}>
+            <p style={{ color: '#64748b', fontWeight: '600' }}>Generating Insights...</p>
+        </div>
+      </div>
+    );
+  }
+
+  const statItems = [
+    { 
+        label: "Total Sales", 
+        value: `₹${generalStats.totalRevenue.toLocaleString()}`, 
+        icon: DollarSign, 
+        color: "#e0f2fe", 
+        iconColor: "#0ea5e9",
+        trend: "+12.5%"
+    },
+    { 
+        label: "Total Orders", 
+        value: generalStats.totalOrders, 
+        icon: ShoppingBag, 
+        color: "#f0fdf4", 
+        iconColor: "#22c55e",
+        trend: "+8.2%"
+    },
+    { 
+        label: "Total Users", 
+        value: generalStats.totalUsers, 
+        icon: Users, 
+        color: "#fef2f2", 
+        iconColor: "#ef4444",
+        trend: "+5.1%"
+    },
+    { 
+        label: "Products", 
+        value: generalStats.totalProducts, 
+        icon: Package, 
+        color: "#faf5ff", 
+        iconColor: "#a855f7",
+        trend: "+2 new"
+    }
+  ];
+
   return (
-    <div style={styles.container}>
+    <div style={styles.dashboard}>
+      {/* Header */}
       <div style={styles.header}>
-        <h2 style={styles.title}>Analytics Overview</h2>
+        <div>
+          <h2 style={styles.headerTitle}>Analytics Dashboard</h2>
+          <p style={styles.headerSubtitle}>Overview of sales, orders, and performance</p>
+        </div>
+        <div style={styles.filterGroup}>
+          {["weekly", "monthly", "quarterly", "yearly"].map((range) => (
+            <button
+              key={range}
+              onClick={() => setTimeRange(range)}
+              style={{
+                ...styles.filterBtn,
+                ...(timeRange === range ? styles.filterBtnActive : {}),
+              }}
+            >
+              {range.charAt(0).toUpperCase() + range.slice(1)}
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* Stats Cards */}
+      {/* Summary Cards */}
       <div style={styles.statsGrid}>
-        <div style={styles.statCard}>
-          <div style={styles.statLabel}>Average Order Value</div>
-          <div style={styles.statValue}>{averageOrderValue}</div>
-        </div>
-        <div style={styles.statCard}>
-          <div style={styles.statLabel}>Conversion Rate</div>
-          <div style={styles.statValue}>12.5%</div>
-        </div>
-        <div style={styles.statCard}>
-          <div style={styles.statLabel}>Low Stock Items</div>
-          <div
-            style={{
-              ...styles.statValue,
-              ...(lowStockProducts.length > 0 ? styles.warningValue : {}),
-            }}
-          >
-            {lowStockProducts.length}
+        {statItems.map((item, i) => (
+          <div key={i} style={styles.card} className="hover-card">
+            <div style={{ ...styles.cardIcon, background: item.color }}>
+                <item.icon size={24} color={item.iconColor} />
+            </div>
+            <div style={styles.cardLabel}>{item.label}</div>
+            <div style={styles.cardValue}>{item.value}</div>
+            <div style={styles.cardTrend}>
+                <ArrowUpRight size={14} />
+                {item.trend} <span style={{color: "#94a3b8", fontWeight: 500, marginLeft: 4}}>vs last month</span>
+            </div>
           </div>
-        </div>
+        ))}
       </div>
 
-      {/* Time Range Selector */}
-      <div style={styles.timeRangeButtons}>
-        <button
-          style={{
-            ...styles.timeBtn,
-            ...(timeRange === "weekly" ? styles.timeBtnActive : {}),
-          }}
-          onClick={() => {
-            setTimeRange("weekly");
-            setViewMode("all");
-          }}
-        >
-          Weekly
-        </button>
-        <button
-          style={{
-            ...styles.timeBtn,
-            ...(timeRange === "monthly" ? styles.timeBtnActive : {}),
-          }}
-          onClick={() => {
-            setTimeRange("monthly");
-            setViewMode("all");
-          }}
-        >
-          Monthly
-        </button>
-        <button
-          style={{
-            ...styles.timeBtn,
-            ...(timeRange === "yearly" ? styles.timeBtnActive : {}),
-          }}
-          onClick={() => {
-            setTimeRange("yearly");
-            setViewMode("all");
-          }}
-        >
-          Yearly
-        </button>
-      </div>
-
-      {/* Yearly Split View (First 6 Months / Last 6 Months) */}
-      {timeRange === "yearly" && (
-        <div style={styles.viewModeButtons}>
-          <button
-            style={{
-              ...styles.viewBtn,
-              ...(viewMode === "all" ? styles.viewBtnActive : {}),
-            }}
-            onClick={() => setViewMode("all")}
-          >
-            Full Year
-          </button>
-          <button
-            style={{
-              ...styles.viewBtn,
-              ...(viewMode === "first6" ? styles.viewBtnActive : {}),
-            }}
-            onClick={() => setViewMode("first6")}
-          >
-            First 6 Months (Jan-Jun)
-          </button>
-          <button
-            style={{
-              ...styles.viewBtn,
-              ...(viewMode === "last6" ? styles.viewBtnActive : {}),
-            }}
-            onClick={() => setViewMode("last6")}
-          >
-            Last 6 Months (Jul-Dec)
-          </button>
-        </div>
-      )}
-
-      {/* Revenue Chart */}
-      <div style={styles.chartSection}>
-        <h3 style={styles.chartTitle}>
-          {timeRange === "weekly"
-            ? "Weekly"
-            : timeRange === "monthly"
-              ? "Monthly"
-              : "Yearly"}{" "}
-          Revenue & Orders
-        </h3>
-        {timeRange === "yearly" && viewMode !== "all" && (
-          <div style={styles.chartSubtitle}>
-            {viewMode === "first6"
-              ? "Showing First 6 Months (January - June)"
-              : "Showing Last 6 Months (July - December)"}
+      {/* Charts Section */}
+      <div style={styles.chartsGrid}>
+        {/* Sales Chart */}
+        <div style={styles.chartCard}>
+          <div style={styles.chartHeader}>
+            <div>
+                <h3 style={styles.chartTitle}>Revenue Growth</h3>
+                <p style={{ ...styles.headerSubtitle, fontSize: "12px" }}>Monthly performance tracking</p>
+            </div>
+            <TrendingUp size={20} color="#64748b" />
           </div>
-        )}
-        <div style={styles.chartContainer}>
-          <div style={styles.barChart}>
-            {currentData.labels.map((label, index) => {
-              const revenueHeight =
-                (currentData.revenue[index] / maxRevenue) * 140;
-              const ordersHeight =
-                (currentData.orders[index] / maxOrders) * 140;
-              return (
-                <div key={index} style={styles.barWrapper}>
-                  <div style={styles.barValue}>
-                    ${(currentData.revenue[index] / 1000).toFixed(0)}k
-                  </div>
-                  <div style={styles.barContainer}>
-                    <div
-                      style={{
-                        ...styles.revenueBar,
-                        height: `${revenueHeight}px`,
-                      }}
-                    ></div>
-                    <div
-                      style={{
-                        ...styles.ordersBar,
-                        height: `${ordersHeight}px`,
-                      }}
-                    ></div>
-                  </div>
-                  <div style={styles.barLabel}>{label}</div>
-                  <div
-                    style={{
-                      fontSize: "9px",
-                      color: "#6c757d",
-                      textAlign: "center",
-                    }}
-                  >
-                    {currentData.orders[index]} orders
-                  </div>
-                </div>
-              );
-            })}
+          <div style={styles.chartVisual}>
+            {currentData.labels.map((label, idx) => (
+              <div key={idx} style={styles.barGroup}>
+                <div 
+                  style={{ 
+                    ...styles.bar, 
+                    height: `${(currentData.revenue[idx] / maxRevenue) * 100}%`,
+                    background: "linear-gradient(to top, #3b82f6, #60a5fa)",
+                    minHeight: "4px"
+                  }}
+                  title={`₹${currentData.revenue[idx]}`}
+                ></div>
+                <span style={styles.barLabel}>{label}</span>
+              </div>
+            ))}
           </div>
         </div>
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "center",
-            gap: "20px",
-            marginTop: "12px",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <div
-              style={{
-                width: "12px",
-                height: "12px",
-                background: "#4facfe",
-                borderRadius: "2px",
-              }}
-            ></div>
-            <span style={{ fontSize: "10px", color: "#6c757d" }}>Revenue</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-            <div
-              style={{
-                width: "12px",
-                height: "12px",
-                background: "#43e97b",
-                borderRadius: "2px",
-              }}
-            ></div>
-            <span style={{ fontSize: "10px", color: "#6c757d" }}>Orders</span>
-          </div>
-        </div>
-      </div>
 
-      {/* Recent Orders and Category Distribution */}
-      <div style={styles.analyticsSections}>
-        <div style={styles.recentOrders}>
-          <h3 style={styles.sectionTitle}>Recent Orders</h3>
-          <table style={styles.table}>
-            <thead>
-              <tr>
-                <th style={styles.tableHeader}>Order ID</th>
-                <th style={styles.tableHeader}>Customer</th>
-                <th style={styles.tableHeader}>Amount</th>
-                <th style={styles.tableHeader}>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentOrders.map((order) => (
-                <tr key={order.id}>
-                  <td style={styles.tableCell}>#{order.id}</td>
-                  <td style={styles.tableCell}>{order.customer}</td>
-                  <td style={styles.tableCell}>{order.total}</td>
-                  <td style={styles.tableCell}>
-                    <span
-                      style={{
-                        ...styles.statusText,
-                        color:
-                          order.status === "delivered"
-                            ? "#10b981"
-                            : order.status === "shipped"
-                              ? "#3b82f6"
-                              : "#f59e0b",
-                      }}
-                    >
-                      {order.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div style={styles.categoryPerformance}>
-          <h3 style={styles.sectionTitle}>Category Distribution</h3>
-          <div style={styles.categoryList}>
-            {categoryPercentages.map((item, index) => (
-              <div key={index} style={styles.categoryItem}>
-                <span style={styles.categoryName}>{item.category}</span>
-                <div style={styles.progressBar}>
-                  <div
-                    style={{ ...styles.progress, width: `${item.percentage}%` }}
-                  ></div>
-                </div>
-                <span style={styles.percentage}>{item.percentage}%</span>
+        {/* Orders Chart */}
+        <div style={styles.chartCard}>
+          <div style={styles.chartHeader}>
+            <div>
+                <h3 style={styles.chartTitle}>Order Volume</h3>
+                <p style={{ ...styles.headerSubtitle, fontSize: "12px" }}>Success rate by period</p>
+            </div>
+            <ShoppingBag size={20} color="#64748b" />
+          </div>
+          <div style={styles.chartVisual}>
+            {currentData.labels.map((label, idx) => (
+              <div key={idx} style={styles.barGroup}>
+                <div 
+                  style={{ 
+                    ...styles.bar, 
+                    height: `${(currentData.orders[idx] / maxOrdersCount) * 100}%`,
+                    background: "linear-gradient(to top, #10b981, #34d399)",
+                    minHeight: "4px"
+                  }}
+                  title={`${currentData.orders[idx]} orders`}
+                ></div>
+                <span style={styles.barLabel}>{label}</span>
               </div>
             ))}
           </div>
         </div>
       </div>
+
+      {/* Bottom Section */}
+      <div style={styles.tableSection}>
+        {/* Recent Orders Table */}
+        <div style={styles.tableCard}>
+          <div style={styles.tableHeader}>
+            <h3 style={styles.chartTitle}>Recent Orders</h3>
+            <button style={{ ...styles.filterBtn, fontSize: "12px", background: "#f1f5f9", color: "#475569" }}>View All</button>
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>Customer</th>
+                  <th style={styles.th}>Date</th>
+                  <th style={styles.th}>Amount</th>
+                  <th style={styles.th}>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recentOrders.map((order, idx) => (
+                  <tr key={idx}>
+                    <td style={styles.td}>
+                        <div style={{ fontWeight: 700, color: "#0f172a" }}>{order.customer}</div>
+                        <div style={{ fontSize: "11px", color: "#94a3b8" }}>Order #{order.id}</div>
+                    </td>
+                    <td style={styles.td}>{order.date}</td>
+                    <td style={styles.td}>
+                        <span style={{ fontWeight: 700 }}>₹{order.total?.toLocaleString()}</span>
+                    </td>
+                    <td style={styles.td}>
+                        <span style={{
+                            ...styles.badge,
+                            background: order.status === "delivered" ? "#dcfce7" : order.status === "pending" ? "#fef9c3" : "#f1f5f9",
+                            color: order.status === "delivered" ? "#166534" : order.status === "pending" ? "#854d0e" : "#475569"
+                        }}>
+                            {order.status?.toUpperCase()}
+                        </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Category Performance */}
+        <div style={styles.tableCard}>
+          <div style={styles.tableHeader}>
+            <h3 style={styles.chartTitle}>Category Distribution</h3>
+            <Filter size={18} color="#64748b" />
+          </div>
+          <div style={styles.progressContainer}>
+            {categoryPercentages.map((item, idx) => (
+              <div key={idx} style={styles.progressItem}>
+                <div style={styles.progressLabel}>
+                  <span>{item.category}</span>
+                  <span>{item.percentage}%</span>
+                </div>
+                <div style={styles.progressBar}>
+                  <div
+                    style={{ 
+                        ...styles.progressFill, 
+                        width: `${item.percentage}%`,
+                        background: `linear-gradient(to right, ${["#3b82f6", "#10b981", "#ef4444", "#f59e0b", "#8b5cf6"][idx % 5]}, ${["#60a5fa", "#34d399", "#f87171", "#fbbf24", "#a78bfa"][idx % 5]})`
+                    }}
+                  ></div>
+                </div>
+              </div>
+            ))}
+            {categoryPercentages.length === 0 && (
+                <p style={{ textAlign: "center", color: "#94a3b8", marginTop: "40px" }}>No category data available</p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        .hover-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+        }
+      `}} />
     </div>
   );
 };

@@ -48,29 +48,54 @@ const UsersManagement = ({ users, setUsers }) => {
     setTimeout(() => setShowAlert(false), 3000);
   };
 
-  const toggleUserStatus = (userId) => {
+  const toggleUserStatus = async (userId) => {
     const user = users.find((u) => u.id === userId);
     const newStatus = user.status === "active" ? "blocked" : "active";
-    setUsers(
-      users.map((user) =>
-        user.id === userId ? { ...user, status: newStatus } : user,
-      ),
-    );
-    showNotification(
-      `${user.name} has been ${newStatus === "active" ? "unblocked" : "blocked"} successfully!`,
-      "info",
-    );
+    
+    try {
+      const response = await fetch(`http://localhost:5000/api/admin/users/${userId}/status`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus, role: user.role })
+      });
+
+      if (!response.ok) throw new Error("Failed to update status");
+
+      setUsers(
+        users.map((u) =>
+          u.id === userId ? { ...u, status: newStatus } : u,
+        ),
+      );
+      showNotification(
+        `${user.name} has been ${newStatus === "active" ? "unblocked" : "blocked"} successfully!`,
+        "info",
+      );
+    } catch (err) {
+      console.error(err);
+      showNotification("Failed to update user status", "danger");
+    }
   };
 
-  const deleteUser = (userId) => {
+  const deleteUser = async (userId) => {
     const user = users.find((u) => u.id === userId);
     if (
       window.confirm(
         `Are you sure you want to delete ${user.name}? This action cannot be undone.`,
       )
     ) {
-      setUsers(users.filter((user) => user.id !== userId));
-      showNotification(`${user.name} has been deleted successfully!`, "danger");
+      try {
+        const response = await fetch(`http://localhost:5000/api/admin/users/${userId}?role=${user.role}`, {
+          method: "DELETE"
+        });
+
+        if (!response.ok) throw new Error("Failed to delete user");
+
+        setUsers(users.filter((u) => u.id !== userId));
+        showNotification(`${user.name} has been deleted successfully!`, "danger");
+      } catch (err) {
+        console.error(err);
+        showNotification("Failed to delete user", "danger");
+      }
     }
   };
 
@@ -94,6 +119,8 @@ const UsersManagement = ({ users, setUsers }) => {
     switch (role) {
       case "admin":
         return "danger";
+      case "seller":
+        return "success";
       case "moderator":
         return "warning";
       default:
@@ -206,6 +233,7 @@ const UsersManagement = ({ users, setUsers }) => {
                 >
                   <option value="all">All Roles</option>
                   <option value="admin">Admin</option>
+                  <option value="seller">Seller</option>
                   <option value="moderator">Moderator</option>
                   <option value="user">User</option>
                 </Form.Select>
@@ -276,7 +304,7 @@ const UsersManagement = ({ users, setUsers }) => {
                           style={{
                             width: "100px",
                             height: "100px",
-                            background: `linear-gradient(135deg, ${user.role === "admin" ? "#FF9900" : user.role === "moderator" ? "#FFA41C" : "#146EB4"}, ${user.role === "admin" ? "#CC7A00" : user.role === "moderator" ? "#CC8400" : "#0F5FA3"})`,
+                            background: `linear-gradient(135deg, ${user.role === "admin" ? "#FF9900" : user.role === "seller" ? "#10b981" : user.role === "moderator" ? "#FFA41C" : "#146EB4"}, ${user.role === "admin" ? "#CC7A00" : user.role === "seller" ? "#059669" : user.role === "moderator" ? "#CC8400" : "#0F5FA3"})`,
                             color: "white",
                             fontSize: "40px",
                             fontWeight: "bold",
@@ -393,8 +421,7 @@ const UsersManagement = ({ users, setUsers }) => {
                         borderRadius: "8px",
                         backgroundColor:
                           idx + 1 === currentPage ? "#FF9900" : "white",
-                        borderColor:
-                          idx + 1 === currentPage ? "#FF9900" : "#ddd",
+                        border: `1.5px solid ${idx + 1 === currentPage ? "#FF9900" : "#ddd"}`,
                       }}
                     >
                       {idx + 1}

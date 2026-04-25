@@ -1,0 +1,29 @@
+
+--- 2026-04-25T06:06:04.080Z ---
+{
+  "user_id": "CUS010",
+  "items": [
+    {
+      "id": "PRDT035",
+      "name": " Sale Party Wear Embroidery Work Pink Color Saree",
+      "price": 10000,
+      "originalPrice": "₹100.00",
+      "discount": "buy1get1",
+      "image": "https://rangvastra.com/cdn/shop/files/cdb38c0b-3b96-474f-a278-20820583b1f1.jpg?v=1750330574",
+      "category": "Women",
+      "description": "Full Saree Of Heavy Quality Faux Georgette \r\n\r\nEmbroidery Details\r\n5mm Sequins & Multy Embroidery Work Done On Saree \r\n4.4 Mtr Work In Saree\r\n\r\nBeautiful Multy & Sequins Embroidery Lace Border In Saree\r\n\r\nBlouse-georgette With Heavy Embroidery 5mm Sequins & Multy Work With Sleeves Work\r\n\r\n*beautiful Glass Fringes  Tessels Attached In Blouse *",
+      "colors": [
+        "red blue"
+      ],
+      "size": null,
+      "quantity": 1,
+      "priceDisplay": 10000
+    }
+  ],
+  "shipping_address": "The best pattern center 59, Rajaji Nagar, cotton mill road, Near cotton mill road, Tiruppur, TAMIL NADU, 641603, India",
+  "payment_method": "card",
+  "total_amount": 11000,
+  "email": "agalyasrimurugan2000@gamil.com",
+  "phone": "+91 98765 43210",
+  "delivery_instructions": ""
+}

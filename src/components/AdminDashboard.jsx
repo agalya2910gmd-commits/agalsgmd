@@ -14,7 +14,7 @@ import "./AdminDashboard.css";
 
 const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState("products");
-  const { products: contextProducts, setProducts: setContextProducts } = useProducts();
+  const { products: contextProducts, setProducts: setContextProducts, fetchProducts } = useProducts();
   
   const [stats, setStats] = useState({
     totalProducts: 0,
@@ -32,186 +32,83 @@ const AdminDashboard = () => {
     setProducts(contextProducts);
   }, [contextProducts]);
 
-  const [orders, setOrders] = useState([
-    {
-      id: 1001,
-      customer: "John Doe",
-      total: 299.97,
-      status: "pending",
-      date: "2024-01-15",
-      items: 3,
-      shipping: "pending",
-      payment: "pending",
-    },
-    {
-      id: 1002,
-      customer: "Jane Smith",
-      total: 199.98,
-      status: "shipped",
-      date: "2024-01-14",
-      items: 2,
-      shipping: "shipped",
-      payment: "completed",
-    },
-    {
-      id: 1003,
-      customer: "Bob Wilson",
-      total: 499.95,
-      status: "delivered",
-      date: "2024-01-13",
-      items: 5,
-      shipping: "delivered",
-      payment: "completed",
-    },
-    {
-      id: 1004,
-      customer: "Alice Brown",
-      total: 149.99,
-      status: "pending",
-      date: "2024-01-16",
-      items: 1,
-      shipping: "pending",
-      payment: "pending",
-    },
-  ]);
+  const [orders, setOrders] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [shippingOrders, setShippingOrders] = useState([]);
+  const [returns, setReturns] = useState([]);
+  const [payments, setPayments] = useState([]);
 
-  const [users, setUsers] = useState([
-    {
-      id: 1,
-      name: "John ",
-      email: "john@example.com",
-      role: "customer",
-      status: "active",
-      joinDate: "2024-01-01",
-    },
-    {
-      id: 2,
-      name: "Jane Smith",
-      email: "jane@example.com",
-      role: "customer",
-      status: "active",
-      joinDate: "2024-01-02",
-    },
-    {
-      id: 3,
-      name: "Admin User",
-      email: "admin@example.com",
-      role: "admin",
-      status: "active",
-      joinDate: "2024-01-01",
-    },
-    {
-      id: 4,
-      name: "Mike Johnson",
-      email: "mike@example.com",
-      role: "customer",
-      status: "blocked",
-      joinDate: "2024-01-03",
-    },
-  ]);
+  const fetchDashboardData = async () => {
+    try {
+      // 1. Fetch Stats
+      const statsRes = await fetch("http://localhost:5000/api/admin/general-stats");
+      if (statsRes.ok) {
+        const data = await statsRes.json();
+        setStats(prev => ({ ...prev, ...data }));
+      }
 
-  const [shippingOrders, setShippingOrders] = useState([
-    {
-      id: "SH001",
-      orderId: 1001,
-      customer: "John Doe",
-      address: "123 Main St, NY",
-      status: "pending",
-      date: "2024-01-15",
-      tracking: "",
-    },
-    {
-      id: "SH002",
-      orderId: 1002,
-      customer: "Jane Smith",
-      address: "456 Oak Ave, CA",
-      status: "in-transit",
-      date: "2024-01-14",
-      tracking: "TRK123456",
-    },
-    {
-      id: "SH003",
-      orderId: 1003,
-      customer: "Bob Wilson",
-      address: "789 Pine Rd, TX",
-      status: "delivered",
-      date: "2024-01-13",
-      tracking: "TRK789012",
-    },
-  ]);
+      // 2. Fetch Orders
+      const ordersRes = await fetch("http://localhost:5000/api/admin-all-orders");
+      if (ordersRes.ok) {
+        const data = await ordersRes.json();
+        setOrders(data);
+      }
 
-  const [returns, setReturns] = useState([
-    {
-      id: "RT001",
-      orderId: 1003,
-      customer: "Bob Wilson",
-      product: "Wooden Table",
-      reason: "Damaged",
-      status: "pending",
-      date: "2024-01-16",
-      refund: 199.99,
-    },
-    {
-      id: "RT002",
-      orderId: 1001,
-      customer: "John Doe",
-      product: "Modern Chair",
-      reason: "Wrong size",
-      status: "approved",
-      date: "2024-01-15",
-      refund: 99.99,
-    },
-  ]);
+      // 3. Fetch Users
+      const usersRes = await fetch("http://localhost:5000/api/admin-all-users");
+      if (usersRes.ok) {
+        const data = await usersRes.json();
+        setUsers(data);
+      }
 
-  const [payments, setPayments] = useState([
-    {
-      id: "PAY001",
-      orderId: 1001,
-      customer: "John Doe",
-      amount: 299.97,
-      method: "Credit Card",
-      status: "pending",
-      date: "2024-01-15",
-    },
-    {
-      id: "PAY002",
-      orderId: 1002,
-      customer: "Jane Smith",
-      amount: 199.98,
-      method: "PayPal",
-      status: "completed",
-      date: "2024-01-14",
-    },
-    {
-      id: "PAY003",
-      orderId: 1003,
-      customer: "Bob Wilson",
-      amount: 499.95,
-      method: "Credit Card",
-      status: "completed",
-      date: "2024-01-13",
-    },
-  ]);
+      // 4. Fetch Products (via Context)
+      if (fetchProducts) {
+        fetchProducts();
+      }
+
+      // 4. Fetch Deliveries (Shipping)
+      const shippingRes = await fetch("http://localhost:5000/api/admin-all-deliveries");
+      if (shippingRes.ok) {
+        const data = await shippingRes.json();
+        setShippingOrders(data.map(d => ({
+          id: `SH${String(d.delivery_id).padStart(3, '0')}`,
+          orderId: d.order_id,
+          customer: d.customer_name || "N/A",
+          address: d.shipping_address_snapshot,
+          status: d.shipping_status?.toLowerCase() || "pending",
+          date: d.created_at ? new Date(d.created_at).toISOString().split('T')[0] : 'N/A',
+          tracking: d.tracking_number || ""
+        })));
+      }
+
+      // 5. Fetch Payments
+      const paymentsRes = await fetch("http://localhost:5000/api/admin-all-payments");
+      if (paymentsRes.ok) {
+        const data = await paymentsRes.json();
+        setPayments(data.map(p => ({
+          id: `PAY${String(p.id).padStart(3, '0')}`,
+          orderId: p.order_id,
+          customer: p.customer_name || "N/A",
+          amount: parseFloat(p.amount),
+          method: p.payment_method,
+          status: p.payment_status?.toLowerCase() || "pending",
+          date: p.created_at ? new Date(p.created_at).toISOString().split('T')[0] : 'N/A'
+        })));
+      }
+    } catch (err) {
+      console.error("Error fetching admin dashboard data:", err);
+    }
+  };
 
   useEffect(() => {
-    calculateStats();
-  }, [products, orders, users, shippingOrders, returns, payments]);
+    fetchDashboardData();
+    const interval = setInterval(fetchDashboardData, 20000); // Poll every 20 seconds
+    return () => clearInterval(interval);
+  }, []);
 
-  const calculateStats = () => {
-    const totalRevenue = payments
-      .filter((p) => p.status === "completed")
-      .reduce((sum, p) => sum + p.amount, 0);
-    setStats({
-      totalProducts: products.length,
-      totalOrders: orders.length,
-      totalUsers: users.length,
-      totalRevenue: totalRevenue,
-      totalShipping: shippingOrders.filter((s) => s.status !== "delivered")
-        .length,
-      totalReturns: returns.filter((r) => r.status === "pending").length,
-      totalPayments: payments.filter((p) => p.status === "pending").length,
-    });
-  };
+  useEffect(() => {
+    // Primary stats come from API via fetchDashboardData
+  }, [payments]);
 
   const renderContent = () => {
     switch (activeTab) {
@@ -306,7 +203,7 @@ const AdminDashboard = () => {
           </div>
           <div className="stat-card">
             <div className="stat-info">
-              <h3>${stats.totalRevenue.toLocaleString()}</h3>
+              <h3>₹{stats.totalRevenue.toLocaleString()}</h3>
               <p>Total Revenue</p>
             </div>
           </div>

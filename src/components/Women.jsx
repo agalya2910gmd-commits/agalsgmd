@@ -1,5 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Container, Row, Col } from "react-bootstrap";
+import { useProducts, normalizeCategoryForShop } from "../context/ProductContext";
+import { useStore } from "../context/StoreContext";
 import {
   FaHeart,
   FaRegHeart,
@@ -799,10 +801,57 @@ function getDiscount(price, orig) {
 }
 
 export default function Women() {
-  const [wishlist, setWishlist] = useState([]);
+  const [productsFromApi, setProductsFromApi] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Direct fetch from API as requested
+  const fetchLocalProducts = useCallback(async () => {
+    try {
+      const response = await fetch("http://localhost:5000/api/products");
+      if (response.ok) {
+        const data = await response.json();
+        console.log("API Response (Women Page):", data);
+        setProductsFromApi(data);
+      }
+    } catch (err) {
+      console.error("Local fetch error in Women Page:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchLocalProducts();
+  }, [fetchLocalProducts]);
+
+  const displayProducts = useMemo(() => {
+    // Combine fetched products with static ones
+    const backendWomen = productsFromApi
+      .filter(p => 
+        String(p.category || "").toLowerCase().includes("women")
+      )
+      .map(p => ({
+        ...p,
+        image: p.image?.startsWith("/") ? `http://localhost:5000${p.image}` : (p.image || ""),
+        images: Array.isArray(p.images) ? p.images : (p.image_url ? p.image_url.split(",").map(i => i.trim().startsWith("/") ? `http://localhost:5000${i.trim()}` : i.trim()) : [p.image?.startsWith("/") ? `http://localhost:5000${p.image}` : (p.image || "")]),
+        price: typeof p.price === 'number' ? `₹${p.price.toLocaleString("en-IN")}` : p.price,
+        originalPrice: typeof p.mrp === 'number' ? `₹${p.mrp.toLocaleString("en-IN")}` : (p.originalPrice || `₹${p.price}`),
+        rating: p.rating || 4.5,
+        reviews: p.reviews || 0,
+        tag: p.tag || "NEW",
+        offer: p.offers || p.offer || p.discount || "",
+        colors: Array.isArray(p.colors) ? p.colors : (p.available_colors ? p.available_colors.split(",").map(c => c.trim()) : []),
+        sizes: Array.isArray(p.sizes) ? p.sizes : (p.available_sizes ? p.available_sizes.split(",").map(s => s.trim()) : []),
+        colorNames: Array.isArray(p.colorNames) ? p.colorNames : (p.available_colors ? p.available_colors.split(",").map(c => c.trim()) : []),
+        category: normalizeCategoryForShop(p.category),
+      }));
+    console.log("Products State (Women Page):", backendWomen);
+    return [...backendWomen, ...products];
+  }, [productsFromApi]);
+
+  const { addToCart, toggleWishlist, isInWishlist } = useStore();
   const [activeColors, setActiveColors] = useState({});
   const [addedItems, setAddedItems] = useState({});
-  const [toast, setToast] = useState(null);
   const [detailProduct, setDetailProduct] = useState(null);
   const [detailVisible, setDetailVisible] = useState(false);
   const [detailAnim, setDetailAnim] = useState("entering");
@@ -812,25 +861,19 @@ export default function Women() {
   const [qty, setQty] = useState(1);
   const [addedDetail, setAddedDetail] = useState(false);
 
-  const showToast = (msg) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2200);
-  };
 
-  const toggleWish = (id, e) => {
-    if (e) e.stopPropagation();
-    const isWished = wishlist.includes(id);
-    setWishlist((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
-    showToast(isWished ? "Removed from wishlist" : "Added to wishlist ♥");
-  };
+
+
 
   const setColor = (id, i) => setActiveColors((prev) => ({ ...prev, [id]: i }));
 
   const handleAddToCart = (item, quantity = 1, fromDetail = false) => {
+    addToCart({
+      ...item,
+      price: parseFloat(String(item.price).replace(/[₹,]/g, "")),
+      quantity
+    });
     setAddedItems((prev) => ({ ...prev, [item.id]: true }));
-    showToast(`${item.name} added to cart! ✓`);
     setTimeout(
       () => setAddedItems((prev) => ({ ...prev, [item.id]: false })),
       1600,
@@ -881,7 +924,7 @@ export default function Women() {
   const parsePrice = (s) => parseFloat(s.replace(/[₹,]/g, ""));
 
   const DetailPage = ({ p }) => {
-    const isWished = wishlist.includes(p.id);
+    const isWished = isInWishlist(p.id);
     const tagStyle = tagStyles[p.tag] || { bg: "#1A1A2E", color: "#ffffff" };
     const similar = getSimilar(p);
     const bars = ratingBars(p);
@@ -895,7 +938,7 @@ export default function Women() {
           <span className="pdp-nav-title">{p.name}</span>
           <button
             className={`pdp-nav-wish ${isWished ? "wished" : ""}`}
-            onClick={() => toggleWish(p.id)}
+            onClick={() => toggleWishlist(p)}
           >
             {isWished ? <FaHeart size={13} /> : <FaRegHeart size={13} />}
             {isWished ? "Wishlisted" : "Wishlist"}
@@ -962,7 +1005,9 @@ export default function Women() {
                 <div className="pdp-prices">
                   <span className="pdp-price">{p.price}</span>
                   <span className="pdp-orig-price">{p.originalPrice}</span>
-                  <span className="pdp-disc-badge">{p.discount} OFF</span>
+                  {(p.discount || p.offer || p.offers) && (p.discount !== "0" && p.offer !== "0" && p.offers !== "0") && (
+                    <span className="pdp-disc-badge">{p.discount || p.offer || p.offers} OFF</span>
+                  )}
                 </div>
                 <p className="pdp-save">
                   You save ₹{savings(p).toLocaleString("en-IN")}
@@ -981,7 +1026,12 @@ export default function Women() {
                     <button
                       key={i}
                       className={`pdp-color-opt ${selColor === i ? "active" : ""}`}
-                      onClick={() => setSelColor(i)}
+                      onClick={() => {
+                        setSelColor(i);
+                        if (p.images && p.images[i] !== undefined) {
+                          setMainImg(i);
+                        }
+                      }}
                     >
                       <div
                         className="pdp-color-swatch"
@@ -1226,7 +1276,7 @@ export default function Women() {
   return (
     <>
       <style>{styles}</style>
-      {toast && <div className="toast-notif">{toast}</div>}
+
 
       {detailVisible && detailProduct && <DetailPage p={detailProduct} />}
 
@@ -1263,14 +1313,14 @@ export default function Women() {
           </Row>
 
           <Row className="g-4">
-            {products.map((item) => {
+            {displayProducts.slice(0, 12).map((item) => {
               const tag = tagStyles[item.tag] || {
                 bg: "#1A1A2E",
                 color: "#fff",
               };
               const discount = getDiscount(item.price, item.originalPrice);
               const isAdded = addedItems[item.id];
-              const isWished = wishlist.includes(item.id);
+              const isWished = isInWishlist(item.id);
 
               return (
                 <Col key={item.id} xs={6} sm={6} md={4} lg={3}>
@@ -1289,7 +1339,7 @@ export default function Women() {
                       </span>
                       <button
                         className="wc-wish"
-                        onClick={(e) => toggleWish(item.id, e)}
+                        onClick={(e) => { e.stopPropagation(); toggleWishlist(item); }}
                       >
                         {isWished ? (
                           <FaHeart size={14} color="#E53E3E" />
@@ -1325,7 +1375,9 @@ export default function Women() {
                       <div className="wc-prices">
                         <span className="wc-price">{item.price}</span>
                         <span className="wc-orig">{item.originalPrice}</span>
-                        <span className="wc-off">{discount}% off</span>
+                        {(item.discount || item.offer || item.offers) && (item.discount !== "0" && item.offer !== "0" && item.offers !== "0") && (
+                          <span className="wc-off">{item.discount || item.offer || item.offers}{!String(item.discount || item.offer || item.offers).includes('%') && '%'} off</span>
+                        )}
                       </div>
 
                       <button

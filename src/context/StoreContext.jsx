@@ -31,26 +31,36 @@ export const StoreProvider = ({ children }) => {
     : guestId;
 
   const [cart, setCart] = useState(() => {
-    const savedCart = localStorage.getItem("cart");
+    const key = `cart_${currentUserId}`;
+    const savedCart = localStorage.getItem(key);
     return savedCart ? JSON.parse(savedCart) : [];
   });
 
   const [wishlist, setWishlist] = useState(() => {
-    const savedWishlist = localStorage.getItem("wishlist");
+    const key = `wishlist_${currentUserId}`;
+    const savedWishlist = localStorage.getItem(key);
     return savedWishlist ? JSON.parse(savedWishlist) : [];
   });
 
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [toast, setToast] = useState({ show: false, message: "" });
+
+  const showToast = (message) => {
+    setToast({ show: true, message });
+    setTimeout(() => {
+      setToast({ show: false, message: "" });
+    }, 3000);
+  };
 
   useEffect(() => {
-    localStorage.setItem("cart", JSON.stringify(cart));
-  }, [cart]);
+    localStorage.setItem(`cart_${currentUserId}`, JSON.stringify(cart));
+  }, [cart, currentUserId]);
 
   useEffect(() => {
-    localStorage.setItem("wishlist", JSON.stringify(wishlist));
-  }, [wishlist]);
+    localStorage.setItem(`wishlist_${currentUserId}`, JSON.stringify(wishlist));
+  }, [wishlist, currentUserId]);
 
   // Always fetch DB context universally using currentUserId
   useEffect(() => {
@@ -59,28 +69,34 @@ export const StoreProvider = ({ children }) => {
         const cartRes = await fetch(`http://localhost:5000/api/cart/${currentUserId}`);
         if (cartRes.ok) {
           const cartData = await cartRes.json();
-          const formattedCart = cartData.map(item => ({
-            id: item.product_id,
-            db_id: item.id,
-            name: item.product_name,
-            price: parseFloat(item.price) || 0,
-            image: item.product_image,
-            quantity: item.quantity || 1
-          }));
-          setCart(formattedCart);
+          // FORCED FRONTEND FILTERING: Ensure only items matching currentUserId are accepted
+          const filteredCart = cartData
+            .filter(item => parseInt(item.user_id) === parseInt(currentUserId))
+            .map(item => ({
+              id: item.product_id,
+              db_id: item.id,
+              name: item.product_name,
+              price: parseFloat(item.price) || 0,
+              image: item.product_image,
+              quantity: item.quantity || 1
+            }));
+          setCart(filteredCart);
         }
 
         const wishRes = await fetch(`http://localhost:5000/api/wishlist/${currentUserId}`);
         if (wishRes.ok) {
           const wishData = await wishRes.json();
-          const formattedWish = wishData.map(item => ({
-            id: item.product_id,
-            db_id: item.id,
-            name: item.product_name,
-            price: parseFloat(item.price) || 0,
-            image: item.product_image
-          }));
-          setWishlist(formattedWish);
+          // FORCED FRONTEND FILTERING: Ensure only items matching currentUserId are accepted
+          const filteredWish = wishData
+            .filter(item => parseInt(item.user_id) === parseInt(currentUserId))
+            .map(item => ({
+              id: item.product_id,
+              db_id: item.id,
+              name: item.product_name,
+              price: parseFloat(item.price) || 0,
+              image: item.product_image
+            }));
+          setWishlist(filteredWish);
         }
       } catch (err) {
         console.error("Error fetching DB cart/wishlist", err);
@@ -118,44 +134,50 @@ export const StoreProvider = ({ children }) => {
         
         // --- ADD TO CART EMAIL TRIGGER ---
         if (isAuthenticated && user?.email) {
-          if (!sentCartEmailsRef.current.has(productId)) {
-            sentCartEmailsRef.current.add(productId);
-            try {
-              const qtyStr = quantity || 1;
-              const priceStr = price ? parseFloat(price).toFixed(2) : "0.00";
-              const itemsList = `1. ${product.name} - Quantity: ${qtyStr} - $${(price * quantity).toFixed(2)}`;
-              
-              const emailParams = {
-                order_number: `CART-${Date.now()}`,
-                order_date: new Date().toLocaleString(),
-                total_amount: `$${(price * quantity).toFixed(2)}`,
-                subtotal: `$${(price * quantity).toFixed(2)}`,
-                shipping: "0",
-                tax: "0",
-                discount: "0",
-                items: itemsList,
-                estimated_delivery: "Pending Checkout",
-                payment_method: "N/A",
-                customer_name: user?.name || "Customer",
-                customer_email: user?.email,
-                customer_phone: user?.phone || "N/A",
-                customer_address: "N/A",
-                to_name: user?.name || "Customer",
-                to_email: user?.email,
-                product_name: product.name,
-                price: priceStr,
-                quantity: qtyStr
-              };
-              
-              emailjs.send(
-                "service_mwjv4vc",
-                "template_vxpz22r",
-                emailParams,
-                "CnGqkQdJYAqYv2Cz6"
-              ).catch(e => console.error("EmailJS cart trigger error:", e));
-            } catch (e) {
-              console.error("Failed to construct email payload", e);
-            }
+          console.log("Add to Cart Triggered", product);
+          console.log("Customer email passed to EmailJS:", user.email);
+
+          try {
+            const qtyStr = quantity || 1;
+            const priceStr = price ? parseFloat(price).toFixed(2) : "0.00";
+            const itemsList = `1. ${product.name} - Quantity: ${qtyStr} - $${(price * quantity).toFixed(2)}`;
+            
+            const emailParams = {
+              order_number: `CART-${Date.now()}`,
+              order_date: new Date().toLocaleString(),
+              total_amount: `$${(price * quantity).toFixed(2)}`,
+              subtotal: `$${(price * quantity).toFixed(2)}`,
+              shipping: "0",
+              tax: "0",
+              discount: "0",
+              items: itemsList,
+              estimated_delivery: "Pending Checkout",
+              payment_method: "N/A",
+              customer_name: user?.name || "Customer",
+              customer_email: user?.email,
+              customer_phone: user?.phone || "N/A",
+              customer_address: "N/A",
+              to_name: user?.name || "Customer",
+              to_email: user?.email,
+              product_name: product.name,
+              price: priceStr,
+              quantity: qtyStr
+            };
+            
+            emailjs.send(
+              "service_mwjv4vc",
+              "template_vxpz22r",
+              emailParams,
+              "CnGqkQdJYAqYv2Cz6"
+            )
+            .then(res => {
+              console.log("Mail API Success (Add to Cart)", res);
+            })
+            .catch(err => {
+              console.error("Mail API Error (Add to Cart)", err);
+            });
+          } catch (e) {
+            console.error("Failed to construct email payload", e);
           }
         }
         // ---------------------------------
@@ -192,6 +214,9 @@ export const StoreProvider = ({ children }) => {
         return [...prevCart, newItem];
       }
     });
+
+    // --- TRIGGER TOAST ---
+    showToast("Added to Cart");
   };
 
   const removeFromCart = async (productId, size = null) => {
@@ -301,6 +326,7 @@ export const StoreProvider = ({ children }) => {
       } catch (err) {
         console.error("Wishlist Background Sync Error:", err);
       }
+      showToast("Added to Wishlist");
     }
   };
 
@@ -311,6 +337,7 @@ export const StoreProvider = ({ children }) => {
       console.error("Failed to remove from remote wishlist", err);
     }
     setWishlist((prev) => prev.filter((item) => item.id !== productId));
+    showToast("Removed from Wishlist");
   };
 
   const toggleWishlist = (productOrId) => {
@@ -373,6 +400,42 @@ export const StoreProvider = ({ children }) => {
       }}
     >
       {children}
+      
+      {/* Toast Notification */}
+      {toast.show && (
+        <div style={{
+          position: 'fixed',
+          top: '20px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          backgroundColor: '#4CAF50',
+          color: 'white',
+          padding: '12px 24px',
+          borderRadius: '50px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          zIndex: 10000,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+          fontWeight: '600',
+          fontSize: '14px',
+          animation: 'toast-in-out 3s ease-in-out forwards',
+          fontFamily: "'Inter', sans-serif"
+        }}>
+          <style>
+            {`
+              @keyframes toast-in-out {
+                0% { opacity: 0; transform: translate(-50%, -20px); }
+                10% { opacity: 1; transform: translate(-50%, 0); }
+                90% { opacity: 1; transform: translate(-50%, 0); }
+                100% { opacity: 0; transform: translate(-50%, -20px); }
+              }
+            `}
+          </style>
+          <span>✅</span>
+          <span>{toast.message}</span>
+        </div>
+      )}
     </StoreContext.Provider>
   );
 };

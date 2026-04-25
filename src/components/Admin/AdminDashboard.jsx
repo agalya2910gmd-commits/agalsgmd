@@ -1,5 +1,5 @@
 // src/components/Admin/AdminDashboard.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import Sidebar from "./Sidebar";
 import DashboardHome from "./DashboardHome";
@@ -12,216 +12,128 @@ import ReturnsManagement from "./ReturnsManagement";
 import PaymentsManagement from "./PaymentsManagement";
 import AdminProfile from "./AdminProfile";
 import { useAuth } from "../../context/AuthContext";
+import { useProducts } from "../../context/ProductContext";
 import "./AdminDashboard.css";
 
 const AdminDashboard = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { logout } = useAuth();
+  const { products: globalProducts, fetchProducts } = useProducts();
+  
   const [activeTab, setActiveTab] = useState("dashboard");
-  const [isLoading, setIsLoading] = useState(false);
+  const [usersCount, setUsersCount] = useState(0);
+  const [orders, setOrders] = useState([]);
+  const [deliveries, setDeliveries] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [returns, setReturns] = useState([]);
+  const [payments, setPayments] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [stats, setStats] = useState({
-    totalProducts: 0,
-    totalOrders: 0,
     totalUsers: 0,
-    totalRevenue: 0,
-    totalShipping: 0,
-    totalReturns: 0,
-    totalPayments: 0,
+    totalOrders: 0,
+    totalProducts: 0,
+    totalRevenue: 0
   });
 
-  // Initialize state variables
-  const [products, setProducts] = useState([
-    {
-      id: 1,
-      name: "Modern Chair",
-      price: 99.99,
-      category: "Furniture",
-      stock: 25,
-      image: "https://via.placeholder.com/100",
-    },
-    {
-      id: 2,
-      name: "Wooden Table",
-      price: 199.99,
-      category: "Furniture",
-      stock: 10,
-      image: "https://via.placeholder.com/100",
-    },
-    {
-      id: 3,
-      name: "LED Lamp",
-      price: 29.99,
-      category: "Lighting",
-      stock: 50,
-      image: "https://via.placeholder.com/100",
-    },
-    {
-      id: 4,
-      name: "Desk Organizer",
-      price: 19.99,
-      category: "Accessories",
-      stock: 5,
-      image: "https://via.placeholder.com/100",
-    },
-  ]);
+  // FETCH real-time data from backend
+  const fetchData = useCallback(() => {
+    console.log("[Admin] Refreshing dashboard data...");
+    
+    // USERS
+    fetch("http://localhost:5000/api/admin-all-users")
+      .then(res => res.json())
+      .then(data => {
+        setUsers(Array.isArray(data) ? data : []);
+      })
+      .catch(err => console.error("Users fetch error:", err));
 
-  const [orders, setOrders] = useState([
-    {
-      id: 1001,
-      customer: "John Doe",
-      total: 299.97,
-      status: "pending",
-      date: "2024-01-15",
-      items: 3,
-    },
-    {
-      id: 1002,
-      customer: "Jane Smith",
-      total: 199.98,
-      status: "shipped",
-      date: "2024-01-14",
-      items: 2,
-    },
-    {
-      id: 1003,
-      customer: "Bob Wilson",
-      total: 499.95,
-      status: "delivered",
-      date: "2024-01-13",
-      items: 5,
-    },
-    {
-      id: 1004,
-      customer: "Alice Brown",
-      total: 149.99,
-      status: "pending",
-      date: "2024-01-16",
-      items: 1,
-    },
-  ]);
+    // GENERAL STATS
+    fetch("http://localhost:5000/api/admin/general-stats")
+      .then(res => res.json())
+      .then(data => {
+        setUsersCount(data.totalUsers || 0);
+        setStats({
+          totalUsers: data.totalUsers || 0,
+          totalOrders: data.totalOrders || 0,
+          totalProducts: data.totalProducts || 0,
+          totalRevenue: data.totalRevenue || 0
+        });
+      })
+      .catch(err => console.error("Stats fetch error:", err));
 
-  const [users, setUsers] = useState([
-    {
-      id: 1,
-      name: "John Doe",
-      email: "john@example.com",
-      role: "customer",
-      status: "active",
-      joinDate: "2024-01-01",
-    },
-    {
-      id: 2,
-      name: "Jane Smith",
-      email: "jane@example.com",
-      role: "customer",
-      status: "active",
-      joinDate: "2024-01-02",
-    },
-    {
-      id: 3,
-      name: "Admin User",
-      email: "admin@example.com",
-      role: "admin",
-      status: "active",
-      joinDate: "2024-01-01",
-    },
-    {
-      id: 4,
-      name: "Mike Johnson",
-      email: "mike@example.com",
-      role: "customer",
-      status: "blocked",
-      joinDate: "2024-01-03",
-    },
-  ]);
+    // ORDERS
+    fetch("http://localhost:5000/api/admin-all-orders")
+      .then(res => res.json())
+      .then(data => {
+        console.log("Orders:", data);
+        if (Array.isArray(data)) {
+          setOrders(data.map(o => ({
+            id: o.id,
+            customer: o.user_name || o.customer || o.user_id || "Guest",
+            date: (o.created_at || o.date)?.split('T')[0] || o.date || "N/A",
+            items: parseInt(o.quantity || o.items || 1),
+            total: parseFloat(o.total_amount || o.total || 0),
+            status: (o.order_status || o.status || "pending").toLowerCase(),
+            product_name: o.product_name,
+            price: parseFloat(o.price || 0),
+            seller_id: o.seller_id,
+            seller_name: o.seller_name,
+            shippingAddress: o.shipping_address || o.shippingAddress,
+            payment_method: o.payment_method || o.paymentMethod || o.payment_mode
+        })));
+      }
+    })
+      .catch(err => console.error("Orders fetch error:", err));
 
-  const [shippingOrders, setShippingOrders] = useState([
-    {
-      id: "SH001",
-      orderId: 1001,
-      customer: "John Doe",
-      address: "123 Main St, NY",
-      status: "pending",
-      date: "2024-01-15",
-      tracking: "",
-    },
-    {
-      id: "SH002",
-      orderId: 1002,
-      customer: "Jane Smith",
-      address: "456 Oak Ave, CA",
-      status: "in-transit",
-      date: "2024-01-14",
-      tracking: "TRK123456",
-    },
-    {
-      id: "SH003",
-      orderId: 1003,
-      customer: "Bob Wilson",
-      address: "789 Pine Rd, TX",
-      status: "delivered",
-      date: "2024-01-13",
-      tracking: "TRK789012",
-    },
-  ]);
+    // PAYMENTS
+    fetch("http://localhost:5000/api/admin-all-payments")
+      .then(res => res.json())
+      .then(data => {
+        console.log("Payments:", data);
+        if (Array.isArray(data)) {
+          setPayments(data.map(p => ({
+            id: String(p.payment_id),
+            orderId: p.order_id,
+            customer: p.customer_name || p.customer_id || "Customer",
+            amount: parseFloat(p.amount || 0),
+            method: p.payment_method || "Online",
+            date: p.created_at?.split('T')[0] || "N/A",
+            status: (p.payment_status || "pending").toLowerCase()
+          })));
+        }
+        setIsLoading(false);
+      })
+      .catch(err => {
+        console.error("Payments fetch error:", err);
+        setIsLoading(false);
+      });
 
-  const [returns, setReturns] = useState([
-    {
-      id: "RT001",
-      orderId: 1003,
-      customer: "Bob Wilson",
-      product: "Wooden Table",
-      reason: "Damaged",
-      status: "pending",
-      date: "2024-01-16",
-      refund: 199.99,
-    },
-    {
-      id: "RT002",
-      orderId: 1001,
-      customer: "John Doe",
-      product: "Modern Chair",
-      reason: "Wrong size",
-      status: "approved",
-      date: "2024-01-15",
-      refund: 99.99,
-    },
-  ]);
-
-  const [payments, setPayments] = useState([
-    {
-      id: "PAY001",
-      orderId: 1001,
-      customer: "John Doe",
-      amount: 299.97,
-      method: "Credit Card",
-      status: "pending",
-      date: "2024-01-15",
-    },
-    {
-      id: "PAY002",
-      orderId: 1002,
-      customer: "Jane Smith",
-      amount: 199.98,
-      method: "PayPal",
-      status: "completed",
-      date: "2024-01-14",
-    },
-    {
-      id: "PAY003",
-      orderId: 1003,
-      customer: "Bob Wilson",
-      amount: 499.95,
-      method: "Credit Card",
-      status: "completed",
-      date: "2024-01-13",
-    },
-  ]);
+    // DELIVERIES
+    fetch("http://localhost:5000/api/admin-all-deliveries")
+      .then(res => res.json())
+      .then(data => {
+        if (Array.isArray(data)) {
+          setDeliveries(data.map(d => ({
+            id: String(d.delivery_id),
+            orderId: d.order_id,
+            customer: "Customer",
+            address: d.shipping_address_snapshot || "N/A",
+            status: (d.shipping_status || "pending").toLowerCase(),
+            tracking: d.awb_code || "",
+            courier_name: d.courier_name || "N/A"
+          })));
+        }
+      })
+      .catch(err => console.error("Deliveries fetch error:", err));
+  }, []);
 
   useEffect(() => {
-    calculateStats();
-  }, [products, orders, users, shippingOrders, returns, payments]);
+    fetchData();
+    // Use interval as requested for "Re-render After New Order" effect
+    const interval = setInterval(fetchData, 5000);
+    return () => clearInterval(interval);
+  }, [fetchData]);
 
   useEffect(() => {
     const path = location.pathname;
@@ -236,22 +148,6 @@ const AdminDashboard = () => {
     else if (path.includes("/profile")) setActiveTab("profile");
     else setActiveTab("dashboard");
   }, [location.pathname]);
-
-  const calculateStats = () => {
-    const totalRevenue = payments
-      .filter((p) => p.status === "completed")
-      .reduce((sum, p) => sum + p.amount, 0);
-    setStats({
-      totalProducts: products.length,
-      totalOrders: orders.length,
-      totalUsers: users.length,
-      totalRevenue: totalRevenue,
-      totalShipping: shippingOrders.filter((s) => s.status !== "delivered")
-        .length,
-      totalReturns: returns.filter((r) => r.status === "pending").length,
-      totalPayments: payments.filter((p) => p.status === "pending").length,
-    });
-  };
 
   const renderContent = () => {
     if (isLoading) {
@@ -269,21 +165,21 @@ const AdminDashboard = () => {
           <DashboardHome
             stats={stats}
             orders={orders}
-            products={products}
+            products={globalProducts}
             payments={payments}
           />
         );
       case "products":
         return (
-          <ProductsManagement products={products} setProducts={setProducts} />
+          <ProductsManagement />
         );
       case "orders":
         return <OrdersManagement orders={orders} setOrders={setOrders} />;
       case "shipping":
         return (
           <ShippingManagement
-            shippingOrders={shippingOrders}
-            setShippingOrders={setShippingOrders}
+            shippingOrders={deliveries}
+            setShippingOrders={setDeliveries}
             orders={orders}
           />
         );
@@ -304,13 +200,13 @@ const AdminDashboard = () => {
           />
         );
       case "users":
-        return <UsersManagement users={users} setUsers={setUsers} />;
+        return <UsersManagement users={users} setUsers={setUsers} usersCount={usersCount} />;
       case "analytics":
         return (
           <Analytics
             stats={stats}
             orders={orders}
-            products={products}
+            products={globalProducts}
             payments={payments}
           />
         );
@@ -321,7 +217,7 @@ const AdminDashboard = () => {
           <DashboardHome
             stats={stats}
             orders={orders}
-            products={products}
+            products={globalProducts}
             payments={payments}
           />
         );
@@ -365,7 +261,15 @@ const AdminDashboard = () => {
             </button>
           </div>
         </div>
-        <div className="admin-content">{renderContent()}</div>
+        <div className={`admin-content ${activeTab === "analytics" ? "full-screen-content" : ""}`}>
+          {isLoading ? (
+            <div className="loading-container" style={{ padding: "40px", textAlign: "center" }}>
+              <h2 style={{ color: "#1a1d23" }}>Loading...</h2>
+            </div>
+          ) : (
+            renderContent()
+          )}
+        </div>
       </div>
     </div>
   );

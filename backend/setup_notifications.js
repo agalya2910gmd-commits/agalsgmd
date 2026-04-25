@@ -58,11 +58,11 @@ async function run() {
       $$ LANGUAGE plpgsql;
     `);
 
-    // 4. Attach Trigger to orders_table
-    console.log("Attaching trigger to orders_table...");
+    // 4. Attach Trigger to orders
+    console.log("Attaching trigger to orders...");
     await client.query(`
       CREATE TRIGGER trg_order_placed_notification
-      AFTER INSERT ON orders_table
+      AFTER INSERT ON orders
       FOR EACH ROW
       EXECUTE FUNCTION fn_create_order_notification();
     `);
@@ -72,14 +72,14 @@ async function run() {
     const migrationRes = await client.query(`
       INSERT INTO notifications (customer_id, order_id, message, is_read, type)
       SELECT 
-        o.customer_id, 
-        o.order_id, 
-        'Your order ' || o.order_id || ' has been placed successfully', 
+        o.user_id as customer_id, 
+        o.id as order_id, 
+        'Your order ' || o.id || ' has been placed successfully', 
         false, 
         'Order Success'
-      FROM orders_table o
+      FROM orders o
       WHERE NOT EXISTS (
-        SELECT 1 FROM notifications n WHERE n.order_id = o.order_id
+        SELECT 1 FROM notifications n WHERE n.order_id = o.id
       )
     `);
 

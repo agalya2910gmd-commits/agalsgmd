@@ -224,7 +224,7 @@ function Login() {
       width: "100%",
       padding: "14px 45px",
       borderRadius: "10px",
-      border: `1.5px solid ${focusedField ? gold : "#ddd"}`,
+      border: `1.5px solid #ddd`,
       outline: "none",
       fontSize: "15px",
       transition: "all 0.2s ease",
@@ -326,7 +326,7 @@ function Login() {
               onBlur={() => setFocusedField(null)}
               style={{
                 ...styles.input,
-                borderColor: focusedField === "email" ? gold : "#ddd",
+                border: `1.5px solid ${focusedField === "email" ? gold : "#ddd"}`,
               }}
             />
           </div>
@@ -343,7 +343,7 @@ function Login() {
               onBlur={() => setFocusedField(null)}
               style={{
                 ...styles.input,
-                borderColor: focusedField === "password" ? gold : "#ddd",
+                border: `1.5px solid ${focusedField === "password" ? gold : "#ddd"}`,
               }}
             />
             <button

@@ -140,6 +140,11 @@ const CheckoutPage = () => {
     if (defaultAddress) {
       setSelectedAddress(defaultAddress);
     }
+    
+    // Auto-fill email from user profile
+    if (user && user.email) {
+      setFormData(prev => ({ ...prev, email: user.email }));
+    }
   }, [user]);
 
   useEffect(() => {
@@ -267,62 +272,81 @@ const CheckoutPage = () => {
       const itemsList = orderData.items
         .map((item, index) => {
           const productName = `${item.name}${item.size ? ` (Size: ${item.size})` : ""}${item.color ? `, Color: ${item.color}` : ""}`;
-          const quantity = item.quantity;
-          const price = (item.price * quantity).toFixed(2);
+          const quantity = item.quantity || 1;
+          const itemPrice = parseFloat(item.price) || 0;
+          const price = (itemPrice * quantity).toFixed(2);
           return `${index + 1}. ${productName} - Quantity: ${quantity} - $${price}`;
         })
         .join("\n");
 
+      // For template compatibility with Add to Cart mail
+      const firstItem = orderData.items[0] || {};
+      const firstItemPrice = parseFloat(firstItem.price) || 0;
+
       const baseParams = {
         order_number: orderData.orderNumber,
         order_date: new Date(orderData.orderDate).toLocaleString(),
-        total_amount: `$${orderData.total.toFixed(2)}`,
-        subtotal: `$${orderData.subtotal.toFixed(2)}`,
+        total_amount: `$${(parseFloat(orderData.total) || 0).toFixed(2)}`,
+        subtotal: `$${(parseFloat(orderData.subtotal) || 0).toFixed(2)}`,
         shipping:
-          orderData.shipping === 0
+          parseFloat(orderData.shipping) === 0
             ? "Free"
-            : `$${orderData.shipping.toFixed(2)}`,
-        tax: `$${orderData.tax.toFixed(2)}`,
+            : `$${(parseFloat(orderData.shipping) || 0).toFixed(2)}`,
+        tax: `$${(parseFloat(orderData.tax) || 0).toFixed(2)}`,
         discount:
-          orderData.discount > 0 ? `${orderData.discount.toFixed(2)}` : "$0",
+          parseFloat(orderData.discount) > 0 ? `$${(parseFloat(orderData.discount) || 0).toFixed(2)}` : "$0",
         items: itemsList,
         estimated_delivery: getEstimatedDeliveryDate(),
-        payment_method: orderData.paymentMethod.toUpperCase(),
+        payment_method: (orderData.paymentMethod || "N/A").toUpperCase(),
         customer_name: orderData.customerInfo.fullName,
         customer_email: orderData.customerInfo.email,
         customer_phone: orderData.customerInfo.phone,
         customer_address: orderData.customerInfo.address,
+        // Added for compatibility with template fields used in Add to Cart mail
+        product_name: firstItem.name || "Multiple Items",
+        price: firstItemPrice.toFixed(2),
+        quantity: firstItem.quantity || 1
       };
 
-      const customerParams = {
-        ...baseParams,
-        to_name: orderData.customerInfo.fullName,
-        to_email: orderData.customerInfo.email,
-      };
-
-      const ownerParams = {
-        ...baseParams,
-        to_name: "Store Owner",
-        to_email: STORE_OWNER_EMAIL,
-      };
-
-      await Promise.all([
-        emailjs.send(
+      // Send to Customer
+      try {
+        const customerParams = {
+          ...baseParams,
+          to_name: orderData.customerInfo.fullName,
+          to_email: orderData.customerInfo.email,
+        };
+        await emailjs.send(
           EMAILJS_CONFIG.SERVICE_ID,
           EMAILJS_CONFIG.TEMPLATE_ID,
           customerParams,
           EMAILJS_CONFIG.PUBLIC_KEY,
-        ),
-        emailjs.send(
+        );
+        console.log("Customer Mail API Success");
+      } catch (custErr) {
+        console.error("Customer Mail API Error:", custErr);
+      }
+
+      // Send to Owner
+      try {
+        const ownerParams = {
+          ...baseParams,
+          to_name: "Store Owner",
+          to_email: STORE_OWNER_EMAIL,
+        };
+        await emailjs.send(
           EMAILJS_CONFIG.SERVICE_ID,
           EMAILJS_CONFIG.TEMPLATE_ID,
           ownerParams,
           EMAILJS_CONFIG.PUBLIC_KEY,
-        ),
-      ]);
+        );
+        console.log("Owner Mail API Success");
+      } catch (ownerErr) {
+        console.error("Owner Mail API Error:", ownerErr);
+      }
+
       return true;
     } catch (error) {
-      console.error("Failed to send emails:", error);
+      console.error("Mail API Error (Order Confirmation):", error);
       return false;
     }
   };
@@ -407,7 +431,21 @@ const CheckoutPage = () => {
     orders.push(newOrder);
     localStorage.setItem("orders", JSON.stringify(orders));
 
-    setEmailStatus("sent");
+    // Send confirmation emails
+    try {
+      console.log("Order Placed", newOrder);
+      console.log("Customer email passed to EmailJS:", formData.email);
+      const emailSent = await sendConfirmationEmails(newOrder);
+      if (emailSent) {
+        setEmailStatus("sent");
+      } else {
+        setEmailStatus("error");
+      }
+    } catch (e) {
+      console.error("Order email failed:", e);
+      setEmailStatus("error");
+    }
+
     setPlacedOrder(newOrder);
     clearCart();
     setOrderPlaced(true);

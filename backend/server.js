@@ -2,19 +2,107 @@ const express = require("express");
 const cors = require("cors");
 const { Pool } = require("pg");
 const path = require("path");
+const fs = require("fs");
 const multer = require("multer");
 const bcrypt = require("bcryptjs");
+const jwt = require("jsonwebtoken");
+const dotenv = require("dotenv");
+dotenv.config();
 
 const app = express();
+
+function logErrorToFile(error, context) {
+  const logPath = path.join(__dirname, "server_error.txt");
+  const logMessage = `\n[${new Date().toISOString()}] ${context}\n${error.stack}\n${"-".repeat(50)}\n`;
+  fs.appendFileSync(logPath, logMessage);
+}
 
 app.use(cors());
 app.use(express.json());
 
+// ================= SELLER ONBOARDING & PICKUP LOCATIONS =================
+app.post("/api/seller/onboarding", async (req, res) => {
+  const { sellerId, formData } = req.body;
+  if (!sellerId || !formData) {
+    return res.status(400).json({ message: "Seller ID and Form Data required" });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    // 1. Extract Pickup Location info from formData
+    const step1 = formData.step1 || {};
+    const step2 = formData.step2 || {};
+    const step5 = formData.step5 || {};
+
+    const contactName = step1.fullName || "";
+    const contactPhone = step1.mobile || "";
+    const addressLine1 = step5.pickupAddress || "";
+    const city = step2.city || "";
+    const state = step2.state || "";
+    const pincode = step2.pincode || "";
+
+    if (addressLine1) {
+      // Check for existing primary pickup for this seller
+      const existing = await client.query(
+        "SELECT pickup_id FROM seller_pickup_locations WHERE seller_id = $1 AND location_name = $2",
+        [sellerId, "Primary Pickup"]
+      );
+
+      if (existing.rows.length > 0) {
+        const pickupId = existing.rows[0].pickup_id;
+        await client.query(
+          `UPDATE seller_pickup_locations SET
+            contact_name = $1, contact_phone = $2, address_line_1 = $3, city = $4, state = $5, pincode = $6
+          WHERE pickup_id = $7`,
+          [contactName, contactPhone, addressLine1, city, state, pincode, pickupId]
+        );
+      } else {
+        const pickupId = await generateNextId(client, "seller_pickup_locations", "pickup_id", "PICK");
+        await client.query(
+          `INSERT INTO seller_pickup_locations 
+          (pickup_id, seller_id, location_name, contact_name, contact_phone, address_line_1, city, state, pincode, is_default, is_active)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+          [pickupId, sellerId, "Primary Pickup", contactName, contactPhone, addressLine1, city, state, pincode, true, true]
+        );
+      }
+    }
+
+    await client.query("COMMIT");
+    res.json({ message: "Onboarding data saved successfully" });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("POST /api/seller/onboarding error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  } finally {
+    client.release();
+  }
+});
+
+app.get("/api/seller/pickup-locations/:sellerId", async (req, res) => {
+  const { sellerId } = req.params;
+  try {
+    const result = await pool.query(
+      "SELECT * FROM seller_pickup_locations WHERE seller_id = $1",
+      [sellerId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error("GET /api/seller/pickup-locations error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 // ================= FORCE JSON =================
 app.use("/api", (req, res, next) => {
-  console.log(`[API Request] ${req.method} ${req.url}`);
+  console.log(`[DEBUG] Middleware hit. Original URL: ${req.originalUrl}, Current URL: ${req.url}`);
   res.setHeader("Content-Type", "application/json");
   next();
+});
+
+app.get("/api/test-me", (req, res) => {
+  res.json({ message: "I am working at the top!" });
 });
 
 // ================= DB =================
@@ -24,17 +112,75 @@ const pool = new Pool({
   database: "postgres",
   password: "postgres123",
   port: 5432,
-  max: 20, // Limit maximum connections to 20
-  idleTimeoutMillis: 30000, // Close idle clients after 30 seconds
-  connectionTimeoutMillis: 2000, // Fail if connection takes longer than 2 seconds
+  max: 25, 
+  idleTimeoutMillis: 10000, // Close idle clients after 10 seconds
+  connectionTimeoutMillis: 5000, 
 });
+
+// Graceful shutdown to prevent connection leaks
+process.on('SIGINT', async () => {
+  console.log('[DB] Closing pool on SIGINT...');
+  await pool.end();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('[DB] Closing pool on SIGTERM...');
+  await pool.end();
+  process.exit(0);
+});
+console.log(`[DB DEBUG] Connecting to ${pool.options.database} on ${pool.options.host}:${pool.options.port} as ${pool.options.user}`);
+
+async function logAudit(client, admin_id, table_name, record_id, action, old_values = null, new_values = null) {
+  try {
+    // Generate AUDTxxx ID
+    const auditIdRes = await client.query(
+      "SELECT audit_id FROM audit_logs ORDER BY created_at DESC LIMIT 1"
+    );
+    let nextAuditId = "AUDT001";
+    if (auditIdRes.rows.length > 0) {
+      const lastId = auditIdRes.rows[0].audit_id;
+      const numPart = parseInt(String(lastId).replace(/\D/g, '') || "0", 10);
+      nextAuditId = "AUDT" + String(numPart + 1).padStart(3, "0");
+    }
+
+    await client.query(
+      `INSERT INTO audit_logs (audit_id, admin_id, table_name, record_id, action, old_values, new_values, created_at) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, CURRENT_TIMESTAMP)`,
+      [
+        nextAuditId,
+        String(admin_id || 'SYSTEM'),
+        table_name || 'N/A',
+        String(record_id || 'N/A'),
+        action,
+        old_values ? JSON.stringify(old_values) : null,
+        new_values ? JSON.stringify(new_values) : null
+      ]
+    );
+    console.log(`[Audit] ${action} logged for ${table_name}:${record_id}`);
+  } catch (err) {
+    console.error("Audit logging failed:", err);
+  }
+}
+
+async function generateNextId(client, table, column, prefix) {
+  const res = await client.query(
+    `SELECT ${column} FROM ${table} WHERE ${column} ~ '^${prefix}[0-9]+$' ORDER BY length(${column}) DESC, ${column} DESC LIMIT 1`
+  );
+  if (res.rows.length > 0) {
+    const lastId = res.rows[0][column];
+    const numPart = parseInt(String(lastId).replace(/\D/g, '') || "0", 10);
+    return prefix + String(numPart + 1).padStart(3, "0");
+  }
+  return prefix + "001";
+}
 
 // ================= HELPERS (ID NORMALIZATION) =================
 function normalizeId(type, id) {
   if (!id) return null;
   const s = String(id);
   if (s.toLowerCase() === 'nan' || s.toLowerCase() === 'undefined') return null;
-  
+
   // If it's pure numeric, convert to CUSxxx, PRDTxxx, or SELxxx
   if (/^\d+$/.test(s)) {
     if (type === 'customer' || type === 'user') return 'CUS' + s.padStart(3, '0');
@@ -46,9 +192,13 @@ function normalizeId(type, id) {
 async function initTables() {
   const client = await pool.connect();
   try {
+    const resSeller = await client.query("SELECT COUNT(*) FROM seller_products");
+    const resAdmin = await client.query("SELECT COUNT(*) FROM admin_products");
+    console.log(`[DB INFO] Total Products - Seller: ${resSeller.rows[0].count}, Admin: ${resAdmin.rows[0].count}`);
+    
     await client.query("BEGIN");
 
-    // Cart Table
+    // Core Tables
     await client.query(`
       CREATE TABLE IF NOT EXISTS cart (
         id SERIAL PRIMARY KEY,
@@ -60,11 +210,7 @@ async function initTables() {
         quantity INTEGER DEFAULT 1,
         subtotal NUMERIC(10,2) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Wishlist Table
-    await client.query(`
+      );
       CREATE TABLE IF NOT EXISTS wishlist (
         id SERIAL PRIMARY KEY,
         user_id VARCHAR(255) NOT NULL,
@@ -73,11 +219,7 @@ async function initTables() {
         product_image TEXT,
         price NUMERIC(10,2) NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Orders Table
-    await client.query(`
+      );
       CREATE TABLE IF NOT EXISTS orders (
         id SERIAL PRIMARY KEY,
         user_id VARCHAR(255) NOT NULL,
@@ -90,12 +232,9 @@ async function initTables() {
         order_status VARCHAR(50) DEFAULT 'Pending',
         shipping_address TEXT,
         payment_method VARCHAR(100),
+        seller_id VARCHAR(255),
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Contact Unified Table
-    await client.query(`
+      );
       CREATE TABLE IF NOT EXISTS contact (
         id SERIAL PRIMARY KEY,
         user_id VARCHAR(255),
@@ -113,11 +252,7 @@ async function initTables() {
         message TEXT,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Payments Table
-    await client.query(`
+      );
       CREATE TABLE IF NOT EXISTS payments (
         payment_id SERIAL PRIMARY KEY,
         order_id INTEGER REFERENCES orders(id),
@@ -131,11 +266,7 @@ async function initTables() {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         paid_at TIMESTAMP
-      )
-    `);
-
-    // Reviews Table
-    await client.query(`
+      );
       CREATE TABLE IF NOT EXISTS reviews (
         review_id SERIAL PRIMARY KEY,
         product_id VARCHAR(255) NOT NULL,
@@ -149,10 +280,10 @@ async function initTables() {
         is_approved BOOLEAN DEFAULT TRUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
+      );
     `);
 
-    // OTP Verifications Table
+    // OTP & Notifications
     await client.query('CREATE EXTENSION IF NOT EXISTS "pgcrypto"');
     await client.query(`
       CREATE TABLE IF NOT EXISTS otp_verifications (
@@ -166,11 +297,7 @@ async function initTables() {
         is_used BOOLEAN DEFAULT FALSE,
         expires_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Notifications Table
-    await client.query(`
+      );
       CREATE TABLE IF NOT EXISTS notifications (
         notification_id SERIAL PRIMARY KEY,
         customer_id VARCHAR(255),
@@ -180,10 +307,10 @@ async function initTables() {
         message TEXT,
         is_read BOOLEAN DEFAULT FALSE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
+      );
     `);
 
-    // Product Images Table
+    // Product Metadata
     await client.query(`
       CREATE TABLE IF NOT EXISTS product_images (
         image_id SERIAL PRIMARY KEY,
@@ -193,11 +320,7 @@ async function initTables() {
         is_primary BOOLEAN DEFAULT FALSE,
         sort_order INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Categories Table
-    await client.query(`
+      );
       CREATE TABLE IF NOT EXISTS categories (
         category_id SERIAL PRIMARY KEY,
         admin_id INTEGER,
@@ -205,10 +328,10 @@ async function initTables() {
         name VARCHAR(255),
         image_url TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
+      );
     `);
 
-    // Deliveries Table
+    // Shipping & Payouts
     await client.query(`
       CREATE TABLE IF NOT EXISTS deliveries (
         delivery_id SERIAL PRIMARY KEY,
@@ -228,11 +351,7 @@ async function initTables() {
         dispatched_at TIMESTAMP,
         delivered_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Shiprocket Table
-    await client.query(`
+      );
       CREATE TABLE IF NOT EXISTS shiprocket (
         sr_order_id SERIAL PRIMARY KEY,
         order_id INTEGER,
@@ -247,11 +366,7 @@ async function initTables() {
         sr_status_code INTEGER,
         sr_created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Seller Payouts Table
-    await client.query(`
+      );
       CREATE TABLE IF NOT EXISTS seller_payouts (
         payout_id SERIAL PRIMARY KEY,
         seller_id VARCHAR(255),
@@ -265,10 +380,10 @@ async function initTables() {
         completed_at TIMESTAMP,
         payout_period_start TIMESTAMP,
         payout_period_end TIMESTAMP
-      )
+      );
     `);
 
-    // Coupons Table
+    // Coupons & Wishlist Items
     await client.query(`
       CREATE TABLE IF NOT EXISTS coupons (
         coupon_id SERIAL PRIMARY KEY,
@@ -281,37 +396,157 @@ async function initTables() {
         used_count INTEGER DEFAULT 0,
         valid_until TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
-    `);
-
-    // Order Coupons Table
-    await client.query(`
+      );
       CREATE TABLE IF NOT EXISTS order_coupons (
         order_coupon_id SERIAL PRIMARY KEY,
         order_id INTEGER,
         coupon_id INTEGER,
         discount_amount NUMERIC(12, 2) NOT NULL
-      )
-    `);
-
-    // Wishlist Items Table
-    await client.query(`
+      );
       CREATE TABLE IF NOT EXISTS wishlist_items (
         wishlist_item_id SERIAL PRIMARY KEY,
         wishlist_id INTEGER,
         product_id VARCHAR(255),
         added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      )
+      );
     `);
 
-    await client.query("COMMIT");
+    // Persistence & Finance Tables (Alphanumeric IDs)
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS bank_account (
+        bank_account_id VARCHAR(255) PRIMARY KEY,
+        owner_id VARCHAR(255) NOT NULL,
+        owner_type VARCHAR(50),
+        account_number VARCHAR(100),
+        account_holder_name VARCHAR(255),
+        upi_id VARCHAR(100),
+        bank_name VARCHAR(255),
+        ifsc_code VARCHAR(100),
+        account_type VARCHAR(50),
+        is_active BOOLEAN DEFAULT TRUE,
+        is_primary BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS auth_sessions (
+        session_id VARCHAR(255) PRIMARY KEY,
+        user_type VARCHAR(50),
+        user_ref_id VARCHAR(255),
+        token_hash VARCHAR(255),
+        device_info VARCHAR(255),
+        ip_address VARCHAR(50),
+        is_blacklisted BOOLEAN DEFAULT FALSE,
+        expires_at TIMESTAMP NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS coupon_usage (
+        usage_id VARCHAR(255) PRIMARY KEY,
+        coupon_id INTEGER,
+        customer_id VARCHAR(255),
+        order_id INTEGER,
+        used_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS daily_finances (
+        daily_finance_id VARCHAR(255) PRIMARY KEY,
+        seller_id VARCHAR(255),
+        date DATE,
+        weekly_finance_id VARCHAR(255),
+        monthly_finance_id VARCHAR(255),
+        total_revenue NUMERIC(15, 2) DEFAULT 0,
+        platform_commission NUMERIC(15, 2) DEFAULT 0,
+        net_seller_earnings NUMERIC(15, 2) DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS weekly_finances (
+        weekly_finance_id VARCHAR(255) PRIMARY KEY,
+        seller_id VARCHAR(255),
+        week_number INT,
+        year INT,
+        total_revenue NUMERIC(15, 2) DEFAULT 0,
+        platform_commission NUMERIC(15, 2) DEFAULT 0,
+        net_seller_earnings NUMERIC(15, 2) DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS monthly_finances (
+        monthly_finance_id VARCHAR(255) PRIMARY KEY,
+        seller_id VARCHAR(255),
+        month_number INT,
+        year INT,
+        total_revenue NUMERIC(15, 2) DEFAULT 0,
+        platform_commission NUMERIC(15, 2) DEFAULT 0,
+        net_seller_earnings NUMERIC(15, 2) DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS half_yearly_finances (
+        half_yearly_finances_id VARCHAR(255) PRIMARY KEY,
+        seller_id VARCHAR(255),
+        half_number INT,
+        year INT,
+        total_revenue NUMERIC(15, 2) DEFAULT 0,
+        platform_commission NUMERIC(15, 2) DEFAULT 0,
+        net_seller_earnings NUMERIC(15, 2) DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE TABLE IF NOT EXISTS finance_transactions (
+        finance_transaction_id VARCHAR(255) PRIMARY KEY,
+        daily_finance_id VARCHAR(255),
+        order_id INTEGER,
+        user_id VARCHAR(255),
+        transaction_type VARCHAR(50),
+        amount NUMERIC(15, 2),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
 
-    // Ensure customers table has new fields
+    // Standard columns & extensions
     await client.query(`
       ALTER TABLE customers ADD COLUMN IF NOT EXISTS dob DATE;
       ALTER TABLE customers ADD COLUMN IF NOT EXISTS gender VARCHAR(20);
       ALTER TABLE customers ADD COLUMN IF NOT EXISTS is_active BOOLEAN DEFAULT TRUE;
       ALTER TABLE customers ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+      ALTER TABLE orders ADD COLUMN IF NOT EXISTS seller_id VARCHAR(255);
+      
+      ALTER TABLE seller_products ADD COLUMN IF NOT EXISTS available_sizes TEXT;
+      ALTER TABLE seller_products ADD COLUMN IF NOT EXISTS available_colors TEXT;
+      ALTER TABLE seller_products ADD COLUMN IF NOT EXISTS coupon_details JSONB;
+      ALTER TABLE seller_products ADD COLUMN IF NOT EXISTS offers TEXT;
+      ALTER TABLE seller_products ADD COLUMN IF NOT EXISTS measurements TEXT;
+
+      ALTER TABLE admin_products ADD COLUMN IF NOT EXISTS available_sizes TEXT;
+      ALTER TABLE admin_products ADD COLUMN IF NOT EXISTS available_colors TEXT;
+      ALTER TABLE admin_products ADD COLUMN IF NOT EXISTS coupon_details JSONB;
+      ALTER TABLE admin_products ADD COLUMN IF NOT EXISTS offers TEXT;
+      ALTER TABLE admin_products ADD COLUMN IF NOT EXISTS measurements TEXT;
+    `);
+
+    // TYPE STANDARDIZATION (Convert UUID to VARCHAR where linking exists)
+    await client.query(`
+      DO $$ 
+      BEGIN 
+        -- Fix bank_account
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'bank_account' AND column_name = 'owner_id' AND data_type = 'uuid') THEN
+          ALTER TABLE bank_account ALTER COLUMN owner_id TYPE VARCHAR(255);
+          ALTER TABLE bank_account ALTER COLUMN bank_account_id TYPE VARCHAR(255);
+        END IF;
+        -- Fix coupon_usage
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'coupon_usage' AND column_name = 'customer_id' AND data_type = 'uuid') THEN
+          ALTER TABLE coupon_usage ALTER COLUMN customer_id TYPE VARCHAR(255);
+          ALTER TABLE coupon_usage ALTER COLUMN usage_id TYPE VARCHAR(255);
+          ALTER TABLE coupon_usage ALTER COLUMN coupon_id TYPE INTEGER USING (NULL);
+          ALTER TABLE coupon_usage ALTER COLUMN order_id TYPE INTEGER USING (NULL);
+        END IF;
+        -- Fix finance_transactions
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'finance_transactions' AND column_name = 'daily_finance_id' AND data_type = 'uuid') THEN
+          ALTER TABLE finance_transactions ALTER COLUMN daily_finance_id TYPE VARCHAR(255);
+          ALTER TABLE finance_transactions ALTER COLUMN finance_transaction_id TYPE VARCHAR(255);
+          ALTER TABLE finance_transactions ALTER COLUMN user_id TYPE VARCHAR(255);
+        END IF;
+        -- Fix auth_sessions
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'auth_sessions' AND column_name = 'user_ref_id' AND data_type = 'uuid') THEN
+          ALTER TABLE auth_sessions ALTER COLUMN user_ref_id TYPE VARCHAR(255);
+          ALTER TABLE auth_sessions ALTER COLUMN session_id TYPE VARCHAR(255);
+        END IF;
+      END $$;
     `);
 
     // Setup trigger for customers updated_at
@@ -331,12 +566,11 @@ async function initTables() {
       EXECUTE FUNCTION update_customers_timestamp();
     `);
 
-    console.log(
-      "✅ All tables ensured: customers (extended), cart, wishlist, orders, contact, payments, reviews",
-    );
+    await client.query("COMMIT");
+    console.log("✅ All tables ensured and standardized.");
   } catch (err) {
     await client.query("ROLLBACK");
-    console.error("Error creating tables:", err);
+    console.error("Error creating/standardizing tables:", err);
   } finally {
     client.release();
   }
@@ -360,8 +594,8 @@ const upload = multer({ storage });
 
 // ================= SIGNUP =================
 app.post("/api/signup", async (req, res) => {
-  const { 
-    name, email, password, isSeller, 
+  const {
+    name, email, password, isSeller,
     store_name, gstin, bank_account, ifsc_code,
     dob, gender
   } = req.body;
@@ -391,7 +625,7 @@ app.post("/api/signup", async (req, res) => {
       const lastSel = await pool.query(
         "SELECT id FROM sellers WHERE id::text ~ '^SEL[0-9]+$' ORDER BY length(id::text) DESC, id DESC LIMIT 1"
       );
-      
+
       let nextSelId = "SEL001";
       if (lastSel.rows.length > 0) {
         const lastId = lastSel.rows[0].id;
@@ -410,6 +644,26 @@ app.post("/api/signup", async (req, res) => {
         "INSERT INTO sellers (id, name, email, password, store_name, gstin, bank_account, ifsc_code) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
         [nextSelId, name, email, hashedPassword, store_name, gstin, bank_account, ifsc_code],
       );
+
+      // Record bank details in bank_account table
+      if (bank_account) {
+        const bankId = "BNK-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
+        await pool.query(
+          "INSERT INTO bank_account (bank_account_id, owner_id, owner_type, account_number, ifsc_code, is_primary) VALUES ($1, $2, $3, $4, $5, $6)",
+          [bankId, nextSelId, 'seller', bank_account, ifsc_code || '', true]
+        );
+      }
+
+      // Async trigger welcome email
+      const { sendWelcomeEmail } = require('./notification_service');
+      if (email) {
+        console.log("Sending Welcome Email to:", email);
+        try {
+          await sendWelcomeEmail({ email, name, userType: 'Seller' });
+        } catch (err) {
+          console.error("Welcome Email Error:", err);
+        }
+      }
     } else {
       const customerCheck = await pool.query(
         "SELECT * FROM customers WHERE email=$1",
@@ -426,7 +680,7 @@ app.post("/api/signup", async (req, res) => {
       const lastCust = await pool.query(
         "SELECT id FROM customers WHERE id ~ '^CUS[0-9]+$' ORDER BY length(id) DESC, id DESC LIMIT 1"
       );
-      
+
       let nextId = "CUS001";
       if (lastCust.rows.length > 0) {
         const lastId = lastCust.rows[0].id;
@@ -446,6 +700,17 @@ app.post("/api/signup", async (req, res) => {
         "INSERT INTO customers (id, name, email, password, dob, gender) VALUES ($1, $2, $3, $4, $5, $6)",
         [nextId, name, email, hashedPassword, dob || null, gender || null],
       );
+
+      // Async trigger welcome email
+      const { sendWelcomeEmail } = require('./notification_service');
+      if (email) {
+        console.log("Sending Welcome Email to:", email);
+        try {
+          await sendWelcomeEmail({ email, name, userType: 'Customer' });
+        } catch (err) {
+          console.error("Welcome Email Error:", err);
+        }
+      }
     }
 
     return res.json({
@@ -499,11 +764,20 @@ app.post("/api/login", async (req, res) => {
 
         delete user.password;
 
+        // Record Auth Session
+        const sessionId = "SESS-" + Date.now() + "-" + Math.floor(Math.random() * 10000);
+        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+        await pool.query(
+          "INSERT INTO auth_sessions (session_id, user_type, user_ref_id, expires_at) VALUES ($1, $2, $3, $4)",
+          [sessionId, check.role, user.id, expiresAt]
+        );
+
         return res.json({
           message: `${check.role} login successful`,
           user: {
             ...user,
             role: check.role,
+            sessionId: sessionId
           },
         });
       }
@@ -544,7 +818,7 @@ app.post("/api/otp/send", async (req, res) => {
 
     console.log(`[OTP DEBUG] Code for ${phone_or_email}: ${otp_code}`); // Log to console for development
 
-    res.json({ 
+    res.json({
       message: "OTP sent successfully",
       // In production, we don't return the code, but for this dev setup we keep it silent or log it
     });
@@ -591,18 +865,32 @@ app.post("/api/otp/verify", async (req, res) => {
 
 // ================= ADD PRODUCT =================
 app.post("/api/products", upload.single("image"), async (req, res) => {
-  const { 
-    name, price, description, seller_id, category, subcategory, stock,
+  const {
+    name, price, description, category, subcategory, stock,
     parent_product_id, category_id, review_id, sku, mrp, stock_quantity,
     weight, length, breadth, height, brand, image_url,
-    variant_name, variant_value, is_variant, is_active
+    variant_name, variant_value, is_variant, is_active,
+    available_sizes, available_colors, coupon_details, offers, measurements
   } = req.body;
+  console.log("Seller ID:", req.body.seller_id);
+  const seller_id = normalizeId('seller', req.body.seller_id);
+  console.log(`[API DEBUG] POST /api/products - name: ${name}, seller_id: ${seller_id}`);
 
+  // Sanitization and hardcoded visibility for persistence
+  console.log(`[POST DEBUG] STARTING TRANSACTION - User: ${seller_id}, Name: ${name}`);
+  const cleanPrice = parseFloat(price) || 0;
+  const cleanMRP = parseFloat(mrp) || cleanPrice;
+  const cleanStock = parseInt(stock) || 0;
+  const cleanStockQty = isNaN(parseInt(stock_quantity)) ? cleanStock : parseInt(stock_quantity);
+  const isActiveStatus = true; // HARDCODED TRUE for visibility
+
+  console.log(`[POST DEBUG] STARTING TRANSACTION - User: ${seller_id}, Name: ${name}`);
   const imagePath = req.file ? `/uploads/${req.file.filename}` : (req.body.image || image_url);
 
-  if (!name || !price || !seller_id) {
+  if (!name || (!price && price !== 0)) {
+    console.warn(`[API] Creation blocked: Missing name/price (name=${name}, price=${price})`);
     return res.status(400).json({
-      message: "Missing required fields",
+      message: "Missing required fields: Name and Price are mandatory.",
     });
   }
 
@@ -612,126 +900,156 @@ app.post("/api/products", upload.single("image"), async (req, res) => {
     await client.query("BEGIN");
 
     // Generate next PRDTxxx product ID
-    const lastProd = await client.query(
-      "SELECT id FROM seller_products WHERE id ~ '^PRDT[0-9]+$' ORDER BY length(id) DESC, id DESC LIMIT 1"
-    );
-    
-    let nextProductId = "PRDT001";
-    if (lastProd.rows.length > 0) {
-      const lastId = lastProd.rows[0].id;
-      const numPart = parseInt(lastId.replace(/\D/g, ''), 10);
-      nextProductId = "PRDT" + String(numPart + 1).padStart(3, "0");
-    } else {
-      // Fallback for any legacy numeric IDs
-      const lastEntry = await client.query("SELECT id FROM seller_products ORDER BY length(id) DESC, id DESC LIMIT 1");
-      if (lastEntry.rows.length > 0) {
-        const rawId = lastEntry.rows[0].id;
-        const numPart = parseInt(String(rawId).replace(/\D/g, '') || "0", 10);
-        nextProductId = "PRDT" + String(numPart + 1).padStart(3, "0");
-      }
-    }
+    const nextProductId = await generateNextId(client, 'seller_products', 'id', 'PRDT');
 
     const sellerResult = await client.query(
       `INSERT INTO seller_products 
       (id, name, price, description, image, seller_id, category, subcategory, stock,
        parent_product_id, category_id, review_id, sku, mrp, stock_quantity,
        weight, length, breadth, height, brand, image_url,
-       variant_name, variant_value, is_variant, is_active) 
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25) RETURNING *`,
+       variant_name, variant_value, is_variant, is_active,
+       available_sizes, available_colors, coupon_details, offers, measurements) 
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30) RETURNING *`,
       [
         nextProductId,
         name,
-        parseFloat(price),
+        cleanPrice,
         description,
         imagePath,
         seller_id,
         category,
         subcategory,
-        parseInt(stock) || 0,
+        cleanStock,
         parseInt(parent_product_id) || null,
         parseInt(category_id) || null,
         parseInt(review_id) || null,
         sku || null,
-        parseFloat(mrp) || null,
-        parseInt(stock_quantity) || (parseInt(stock) || 0),
-        parseFloat(weight) || null,
-        parseFloat(length) || null,
-        parseFloat(breadth) || null,
-        parseFloat(height) || null,
+        cleanMRP,
+        cleanStockQty,
+        parseFloat(weight) || 0,
+        parseFloat(length) || 0,
+        parseFloat(breadth) || 0,
+        parseFloat(height) || 0,
         brand || null,
         image_url || null,
         variant_name || null,
         variant_value || null,
-        is_variant === 'true' || is_variant === true,
-        is_active === 'false' || is_active === false ? false : true
+        (is_variant === 'true' || is_variant === true),
+        isActiveStatus,
+        available_sizes || null,
+        available_colors || null,
+        coupon_details ? (typeof coupon_details === 'string' ? coupon_details : JSON.stringify(coupon_details)) : null,
+        offers || null,
+        measurements || null
       ],
     );
+    console.log(`[POST DEBUG] seller_products INSERT rowCount: ${sellerResult.rowCount}`);
 
     const product = sellerResult.rows[0];
+    console.log("Inserted Product:", product);
 
     await client.query(
       `INSERT INTO admin_products
       (id, name, price, description, image, seller_id, category, subcategory, stock,
        parent_product_id, category_id, review_id, sku, mrp, stock_quantity,
        weight, length, breadth, height, brand, image_url,
-       variant_name, variant_value, is_variant, is_active)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25)`,
+       variant_name, variant_value, is_variant, is_active,
+       available_sizes, available_colors, coupon_details, offers, measurements)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30)`,
       [
         product.id,
         name,
-        parseFloat(price),
+        cleanPrice,
         description,
         imagePath,
         seller_id,
         category,
         subcategory,
-        parseInt(stock) || 0,
+        cleanStock,
         parseInt(parent_product_id) || null,
         parseInt(category_id) || null,
         parseInt(review_id) || null,
         sku || null,
-        parseFloat(mrp) || null,
-        parseInt(stock_quantity) || (parseInt(stock) || 0),
-        parseFloat(weight) || null,
-        parseFloat(length) || null,
-        parseFloat(breadth) || null,
-        parseFloat(height) || null,
+        cleanMRP,
+        cleanStockQty,
+        parseFloat(weight) || 0,
+        parseFloat(length) || 0,
+        parseFloat(breadth) || 0,
+        parseFloat(height) || 0,
         brand || null,
         image_url || null,
         variant_name || null,
         variant_value || null,
-        is_variant === 'true' || is_variant === true,
-        is_active === 'false' || is_active === false ? false : true
+        (is_variant === 'true' || is_variant === true),
+        isActiveStatus,
+        available_sizes || null,
+        available_colors || null,
+        coupon_details ? (typeof coupon_details === 'string' ? coupon_details : JSON.stringify(coupon_details)) : null,
+        offers || null,
+        measurements || null
       ],
     );
+    console.log(`[POST DEBUG] INSERT INTO admin_products SUCCESS: ${product.id}`);
 
-    await client.query("COMMIT");
+    // ─── Automated Multi-Table Sync: Product Variants ───
+    if (available_sizes || available_colors) {
+      const sizes = available_sizes ? available_sizes.split(',').map(s => s.trim()) : ['Standard'];
+      const colors = available_colors ? available_colors.split(',').map(c => c.trim()) : ['Default'];
 
-    // After commit, ensure the primary image is in the product_images table if it's missing
-    try {
-      if (imagePath) {
-        await pool.query(
-          "INSERT INTO product_images (product_id, image_url, is_primary) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
-          [product.id, imagePath, true]
-        );
-      }
-      
-      // Also handle additional images if string provided in category/description as fallback or if added in frontend later
-      if (req.body.additional_images && typeof req.body.additional_images === 'string') {
-        const urls = req.body.additional_images.split(',').map(u => u.trim());
-        for (const url of urls) {
-          if (url && url !== imagePath) {
-            await pool.query(
-              "INSERT INTO product_images (product_id, image_url, is_primary) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
-              [product.id, url, false]
-            );
-          }
+      for (const size of sizes) {
+        for (const color of colors) {
+          // Generate VRTxxx ID
+          const nextVrtId = await generateNextId(client, 'product_variants', 'variant_id', 'VRT');
+
+          await client.query(
+            `INSERT INTO product_variants 
+             (variant_id, product_id, sku, variant_name, variant_value, price, stock_quantity, weight, is_active) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+            [
+              nextVrtId,
+              product.id,
+              sku ? `${sku}-${size.charAt(0)}${color.charAt(0)}` : `SKU-${product.id}-${size}-${color}`,
+              'Color-Size',
+              `${color}-${size}`,
+              parseFloat(price),
+              parseInt(stock_quantity) || 10,
+              parseFloat(weight) || 0,
+              true
+            ]
+          );
         }
       }
-    } catch (imgErr) {
-      console.error("Error storing additional images:", imgErr);
-      // Don't fail the whole request because images are metadata
     }
+
+    // ─── Automated Multi-Table Sync: Coupons ───
+    if (coupon_details) {
+      try {
+        const cd = typeof coupon_details === 'string' ? JSON.parse(coupon_details) : coupon_details;
+        if (cd && cd.code) {
+          await client.query(
+            `INSERT INTO coupons (admin_id, code, type, discount_percent, max_discount, min_order_val, valid_until)
+             VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (code) DO NOTHING`,
+            [null, cd.code, cd.type || 'percentage', parseFloat(cd.discount) || 10, 500, 1000, null]
+          );
+        }
+      } catch (e) {
+        console.warn("Could not auto-generate coupon entry:", e.message);
+      }
+    }
+
+    // ─── Automated Multi-Table Sync: Product Images ───
+    if (imagePath) {
+      await client.query(
+        "INSERT INTO product_images (product_id, image_url, is_primary, created_at) VALUES ($1, $2, $3, CURRENT_TIMESTAMP)",
+        [product.id, imagePath, true]
+      );
+    }
+
+    await client.query("COMMIT");
+    console.log(`[POST DEBUG] COMMIT SUCCESSFUL - Product ${nextProductId} is now PERMANENTLY in DB.`);
+
+    // Log audit AFTER commit to avoid transaction poisoning
+    await logAudit(pool, seller_id, 'seller_products', product.id, 'CREATE_PRODUCT', null, product);
 
     return res.json({
       message: "Product added successfully",
@@ -739,9 +1057,11 @@ app.post("/api/products", upload.single("image"), async (req, res) => {
     });
   } catch (error) {
     await client.query("ROLLBACK");
-    console.error("Add product error:", error);
+    console.error("CRITICAL: Add product error (Transaction Rolled Back):", error);
+    logErrorToFile(error, "POST /api/products - Product Addition");
     return res.status(500).json({
-      message: "Server error while adding product",
+      message: "Database error while adding product. The operation was safely rolled back.",
+      detail: error.message
     });
   } finally {
     client.release();
@@ -751,28 +1071,35 @@ app.post("/api/products", upload.single("image"), async (req, res) => {
 // ================= GET PRODUCTS =================
 app.get("/api/products", async (req, res) => {
   try {
+    console.log(`[DATABASE DEBUG] Fetching ALL products from admin_products at ${new Date().toISOString()}`);
     const result = await pool.query(
-      "SELECT * FROM admin_products ORDER BY created_at DESC",
+      "SELECT *, offers as offer FROM admin_products ORDER BY created_at DESC",
     );
 
-    return res.json(result.rows);
+    console.log(`[DATABASE DEBUG] Successfully retrieved ${result.rows.length} products from DB.`);
+    res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
+    return res.status(200).json(result.rows);
   } catch (error) {
-    console.error("Fetch products error:", error);
+    console.error("CRITICAL: Fetch products error:", error);
     return res.status(500).json({
       message: "Server error while fetching products",
+      error: error.message
     });
   }
 });
 
 // ================= UPDATE PRODUCT =================
 app.put("/api/products/:id", upload.single("image"), async (req, res) => {
-  const { id } = req.params;
-  const { 
+  const { id: rawId } = req.params;
+  const id = normalizeId('product', rawId);
+  const {
     name, price, description, category, subcategory, stock,
     parent_product_id, category_id, review_id, sku, mrp, stock_quantity,
     weight, length, breadth, height, brand, image_url,
-    variant_name, variant_value, is_variant, is_active
+    variant_name, variant_value, is_variant, is_active,
+    available_sizes, available_colors, coupon_details, offers, measurements
   } = req.body;
+  const seller_id = normalizeId('seller', req.body.seller_id);
 
   const imagePath = req.file ? `/uploads/${req.file.filename}` : (req.body.image || image_url);
 
@@ -781,71 +1108,107 @@ app.put("/api/products/:id", upload.single("image"), async (req, res) => {
   try {
     await client.query("BEGIN");
 
-    const params = [
-      name,
-      parseFloat(price),
-      description,
-      category,
-      subcategory,
-      parseInt(stock) || 0,
-      imagePath,
-      parseInt(parent_product_id) || null,
-      parseInt(category_id) || null,
-      parseInt(review_id) || null,
-      sku || null,
-      parseFloat(mrp) || null,
-      parseInt(stock_quantity) || (parseInt(stock) || 0),
-      parseFloat(weight) || null,
-      parseFloat(length) || null,
-      parseFloat(breadth) || null,
-      parseFloat(height) || null,
-      brand || null,
-      image_url || null,
-      variant_name || null,
-      variant_value || null,
-      is_variant === 'true' || is_variant === true,
+    // Fetch old record for Audit
+    const oldRes = await client.query("SELECT * FROM seller_products WHERE id = $1", [id]);
+    const oldProduct = oldRes.rows[0];
+
+    const query = `
+      UPDATE seller_products SET 
+        name=$1, price=$2, description=$3, category=$4, subcategory=$5, stock=$6, image=$7,
+        parent_product_id=$8, category_id=$9, review_id=$10, sku=$11, mrp=$12, stock_quantity=$13,
+        weight=$14, length=$15, breadth=$16, height=$17, brand=$18, image_url=$19,
+        variant_name=$20, variant_value=$21, is_variant=$22, is_active=$23,
+        available_sizes=$25, available_colors=$26, coupon_details=$27, offers=$28, measurements=$29
+      WHERE id=$24 RETURNING *`;
+    const updateResult = await client.query(query, [
+      name, parseFloat(price), description, category, subcategory, parseInt(stock) || 0, imagePath,
+      parseInt(parent_product_id) || null, parseInt(category_id) || null, parseInt(review_id) || null,
+      sku || null, parseFloat(mrp) || null, parseInt(stock_quantity) || (parseInt(stock) || 0),
+      parseFloat(weight) || null, parseFloat(length) || null, parseFloat(breadth) || null,
+      parseFloat(height) || null, brand || null, image_url || null,
+      variant_name || null, variant_value || null, is_variant === 'true' || is_variant === true,
       is_active === 'false' || is_active === false ? false : true,
-      id
-    ];
+      id,
+      available_sizes || null,
+      available_colors || null,
+      coupon_details ? (typeof coupon_details === 'string' ? coupon_details : JSON.stringify(coupon_details)) : null,
+      offers || null,
+      measurements || null
+    ]);
 
-    const result = await client.query(
-      `UPDATE seller_products
-       SET name=$1, price=$2, description=$3, category=$4,
-           subcategory=$5, stock=$6, image=COALESCE($7,image),
-           parent_product_id=$8, category_id=$9, review_id=$10,
-           sku=$11, mrp=$12, stock_quantity=$13, weight=$14,
-           length=$15, breadth=$16, height=$17, brand=$18,
-           image_url=$19, variant_name=$20, variant_value=$21,
-           is_variant=$22, is_active=$23, updated_at=CURRENT_TIMESTAMP
-       WHERE id=$24 RETURNING *`,
-      params,
-    );
-
-    if (result.rowCount === 0) {
+    if (updateResult.rowCount === 0) {
       await client.query("ROLLBACK");
       return res.status(404).json({
         message: "Product not found",
       });
     }
 
-    await client.query(
-      `UPDATE admin_products
-       SET name=$1, price=$2, description=$3, category=$4,
-           subcategory=$5, stock=$6, image=COALESCE($7,image),
-           parent_product_id=$8, category_id=$9, review_id=$10,
-           sku=$11, mrp=$12, stock_quantity=$13, weight=$14,
-           length=$15, breadth=$16, height=$17, brand=$18,
-           image_url=$19, variant_name=$20, variant_value=$21,
-           is_variant=$22, is_active=$23, updated_at=CURRENT_TIMESTAMP
-       WHERE id=$24`,
-      params,
-    );
+    await client.query(`
+      UPDATE admin_products SET 
+        name=$1, price=$2, description=$3, category=$4, subcategory=$5, stock=$6, image=$7,
+        parent_product_id=$8, category_id=$9, review_id=$10, sku=$11, mrp=$12, stock_quantity=$13,
+        weight=$14, length=$15, breadth=$16, height=$17, brand=$18, image_url=$19,
+        variant_name=$20, variant_value=$21, is_variant=$22, is_active=$23,
+        available_sizes=$25, available_colors=$26, coupon_details=$27, offers=$28, measurements=$29
+      WHERE id=$24`, [
+      name, parseFloat(price), description, category, subcategory, parseInt(stock) || 0, imagePath,
+      parseInt(parent_product_id) || null, parseInt(category_id) || null, parseInt(review_id) || null,
+      sku || null, parseFloat(mrp) || null, parseInt(stock_quantity) || (parseInt(stock) || 0),
+      parseFloat(weight) || null, parseFloat(length) || null, parseFloat(breadth) || null,
+      parseFloat(height) || null, brand || null, image_url || null,
+      variant_name || null, variant_value || null, is_variant === 'true' || is_variant === true,
+      is_active === 'false' || is_active === false ? false : true,
+      id,
+      available_sizes || null,
+      available_colors || null,
+      coupon_details ? (typeof coupon_details === 'string' ? coupon_details : JSON.stringify(coupon_details)) : null,
+      offers || null,
+      measurements || null
+    ]);
+
+    const updatedProduct = updateResult.rows[0];
+
+    // ─── Automated Multi-Table Sync: Product Variants (Re-sync) ───
+    if (available_sizes || available_colors) {
+      await client.query("DELETE FROM product_variants WHERE product_id = $1", [id]);
+      const sizes = available_sizes ? available_sizes.split(',').map(s => s.trim()) : ['Standard'];
+      const colors = available_colors ? available_colors.split(',').map(c => c.trim()) : ['Default'];
+      for (const size of sizes) {
+        for (const color of colors) {
+          const nextVrtId = await generateNextId(client, 'product_variants', 'variant_id', 'VRT');
+          await client.query(
+            `INSERT INTO product_variants 
+             (variant_id, product_id, sku, variant_name, variant_value, price, stock_quantity, weight, is_active) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+            [nextVrtId, id, sku ? `${sku}-${size.charAt(0)}${color.charAt(0)}` : `SKU-${id}-${size}-${color}`, 'Color-Size', `${color}-${size}`, parseFloat(price), parseInt(stock_quantity) || 10, parseFloat(weight) || 0, true]
+          );
+        }
+      }
+    }
+
+    // ─── Automated Multi-Table Sync: Coupons ───
+    if (coupon_details) {
+      try {
+        const cd = typeof coupon_details === 'string' ? JSON.parse(coupon_details) : coupon_details;
+        if (cd && cd.code) {
+          await client.query(
+            `INSERT INTO coupons (admin_id, code, type, discount_percent, max_discount, min_order_val, valid_until)
+             VALUES ($1, $2, $3, $4, $5, $6, $7) ON CONFLICT (code) DO UPDATE SET discount_percent = EXCLUDED.discount_percent`,
+            [null, cd.code, cd.type || 'percentage', parseFloat(cd.discount) || 10, 500, 1000, null]
+          );
+        }
+      } catch (e) {
+        console.warn("Could not auto-update coupon entry:", e.message);
+      }
+    }
+
+    await logAudit(client, seller_id || 'ADMIN', 'seller_products', id, 'UPDATE_PRODUCT', oldProduct, updatedProduct);
 
     await client.query("COMMIT");
 
     return res.json({
       message: "Product updated successfully",
-      product: result.rows[0],
+      product: updatedProduct,
     });
   } catch (error) {
     await client.query("ROLLBACK");
@@ -950,21 +1313,28 @@ app.post("/api/cart", async (req, res) => {
         [newQty, subtotal, checkItem.rows[0].id],
       );
       res.json(update.rows[0]);
-      
+
       // Async trigger cart notification
       const { sendCartNotification } = require('./notification_service');
       const userRes = await pool.query("SELECT name, email FROM customers WHERE id = $1", [uid]);
       let targetEmail = (userRes.rows.length > 0 && userRes.rows[0].email) ? userRes.rows[0].email : "";
       if (!targetEmail || !(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetEmail))) targetEmail = "agalyasrimurugan2000@gmail.com";
       const targetName = (userRes.rows.length > 0 && userRes.rows[0].name) ? userRes.rows[0].name : "Test Customer";
-      
-      sendCartNotification({
-        customerEmail: targetEmail,
-        customerName: targetName,
-        productName: product_name || "Product",
-        price: cleanPrice || 0,
-        quantity: quantity || 1
-      });
+
+      if (targetEmail) {
+        console.log("Sending Add-to-Cart Email to:", targetEmail);
+        try {
+          await sendCartNotification({
+            customerEmail: targetEmail,
+            customerName: targetName,
+            productName: product_name || "Product",
+            price: cleanPrice || 0,
+            quantity: quantity || 1
+          });
+        } catch (err) {
+          console.error("Email Error:", err);
+        }
+      }
       return;
     } else {
       const sub = (quantity || 1) * (cleanPrice || 0);
@@ -988,14 +1358,21 @@ app.post("/api/cart", async (req, res) => {
       let targetEmail = (userRes.rows.length > 0 && userRes.rows[0].email) ? userRes.rows[0].email : "";
       if (!targetEmail || !(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetEmail))) targetEmail = "agalyasrimurugan2000@gmail.com";
       const targetName = (userRes.rows.length > 0 && userRes.rows[0].name) ? userRes.rows[0].name : "Test Customer";
-      
-      sendCartNotification({
-        customerEmail: targetEmail,
-        customerName: targetName,
-        productName: product_name || "Product",
-        price: cleanPrice || 0,
-        quantity: quantity || 1
-      });
+
+      if (targetEmail) {
+        console.log("Sending Add-to-Cart Email to:", targetEmail);
+        try {
+          await sendCartNotification({
+            customerEmail: targetEmail,
+            customerName: targetName,
+            productName: product_name || "Product",
+            price: cleanPrice || 0,
+            quantity: quantity || 1
+          });
+        } catch (err) {
+          console.error("Email Error:", err);
+        }
+      }
       return;
     }
   } catch (err) {
@@ -1094,7 +1471,7 @@ app.post("/api/wishlist", async (req, res) => {
 
     // 1. Map or create parent wishlist record
     let wishlistHeader = await pool.query("SELECT id FROM wishlist WHERE user_id=$1 LIMIT 1", [wishlistUserId]);
-    
+
     let wishlistId;
     if (wishlistHeader.rows.length === 0) {
       // Create a shell record in wishlist table to act as header
@@ -1137,16 +1514,16 @@ app.delete("/api/wishlist/:userId/:productId", async (req, res) => {
   try {
     const userId = req.params.userId;
     const productId = req.params.productId;
-    
+
     const result = await pool.query(
-      "DELETE FROM wishlist_items WHERE customer_id=$1 AND product_id=$2 RETURNING *", 
+      "DELETE FROM wishlist_items WHERE customer_id=$1 AND product_id=$2 RETURNING *",
       [userId, productId]
     );
-    
+
     if (result.rowCount === 0) {
       return res.status(404).json({ message: "Item not found in wishlist" });
     }
-    
+
     res.json({ message: "Item removed from wishlist" });
   } catch (err) {
     console.error("Delete wishlist item error:", err);
@@ -1194,9 +1571,9 @@ app.get("/api/reviews/:productId", async (req, res) => {
 
 // POST a new review
 app.post("/api/reviews", async (req, res) => {
-  const { 
-    product_id, customer_id, order_item_id, order_id, 
-    rating, title, body, reviewer_name 
+  const {
+    product_id, customer_id, order_item_id, order_id,
+    rating, title, body, reviewer_name
   } = req.body;
 
   const pid = product_id;
@@ -1260,8 +1637,9 @@ app.post("/api/reviews", async (req, res) => {
 });
 
 app.post("/api/orders", async (req, res) => {
-  const { user_id, items, shipping_address, payment_method, total_amount } =
-    req.body;
+  const { items, shipping_address, payment_method, total_amount, email: bodyEmail } = req.body;
+  const user_id = normalizeId('user', req.body.user_id || req.body.userId || req.body.uid);
+
   if (!user_id || !items || !Array.isArray(items)) {
     return res.status(400).json({ message: "Invalid order payload" });
   }
@@ -1269,18 +1647,34 @@ app.post("/api/orders", async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+
+    // Fetch contact info for addresses
+    const contactRes = await client.query("SELECT * FROM contact WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 1", [user_id]);
     
-    // Fetch user info for notifications early to avoid released client issues
-    const userRes = await client.query("SELECT name, email FROM customers WHERE id = $1", [user_id]);
-    const contactRes = await client.query("SELECT phone_number FROM contact WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 1", [user_id]);
+    // Ensure address table is updated/synced if contact info is available
+    if (contactRes.rows.length > 0) {
+      const contact = contactRes.rows[0];
+      await client.query(`
+        INSERT INTO address (customer_id, street, city, pincode, address_type, created_at)
+        VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+        ON CONFLICT DO NOTHING
+      `, [user_id, contact.street, contact.city, contact.pincode, 'Billing']);
+    }
 
     let firstOrderId = null;
 
     for (const item of items) {
-      const pid = item.id || item.product_id || item._id;
+      const pid = normalizeId('product', item.id || item.product_id || item._id);
+      
+      // Fetch seller info and product details for commission
+      let pInfo = await client.query("SELECT seller_id, price FROM admin_products WHERE id = $1", [pid]);
+      if (pInfo.rows.length === 0) {
+        pInfo = await client.query("SELECT seller_id, price FROM seller_products WHERE id = $1", [pid]);
+      }
+      const sId = pInfo.rows[0]?.seller_id;
+
       const name = item.product_name || item.name || "Unknown Product";
-      const image =
-        item.product_image || item.image || (item.images ? item.images[0] : "");
+      const image = item.product_image || item.image || (item.images ? item.images[0] : "");
       const qty = parseInt(item.quantity || 1, 10);
 
       let numericPrice = 0;
@@ -1289,6 +1683,7 @@ app.post("/api/orders", async (req, res) => {
       } else if (typeof item.price === "string") {
         numericPrice = parseFloat(item.price.replace(/[₹,$\s]/g, ""));
       }
+      if (isNaN(numericPrice)) numericPrice = 0;
 
       let numericTotal = 0;
       if (typeof total_amount === "number") {
@@ -1299,8 +1694,8 @@ app.post("/api/orders", async (req, res) => {
 
       const orderResult = await client.query(
         `INSERT INTO orders 
-        (user_id, product_id, product_name, product_image, price, quantity, total_amount, shipping_address, payment_method) 
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`,
+        (user_id, product_id, product_name, product_image, price, quantity, total_amount, shipping_address, payment_method, seller_id) 
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING id`,
         [
           user_id || null,
           pid || null,
@@ -1311,24 +1706,88 @@ app.post("/api/orders", async (req, res) => {
           numericTotal || null,
           shipping_address || null,
           payment_method || null,
+          sId || null,
         ],
       );
-      
-      if (!firstOrderId) firstOrderId = orderResult.rows[0].id;
 
-      // Also record payment for this item
+      const orderId = orderResult.rows[0].id;
+      if (!firstOrderId) firstOrderId = orderId;
+
+      const pPrice = pInfo.rows[0]?.price || numericPrice;
+
+      // Log Order Creation to Audit
+      await logAudit(client, user_id, 'orders', orderId, 'CREATE_ORDER', null, { product_id: pid, quantity: qty, total: (numericPrice || 0) * (qty || 1) });
+
+      // Manual finance transaction removed - handled by trigger
+
+
+      // Initialize Order Status History
+      const nextHstId = await generateNextId(client, 'order_status_history', 'history_id', 'HST');
+      await client.query(
+        `INSERT INTO order_status_history (history_id, order_id, status, changed_by, changed_at) 
+         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)`,
+        [nextHstId, orderId, 'placed', user_id]
+      );
+
+      // Create Delivery Record
+      await client.query(
+        `INSERT INTO deliveries 
+         (order_id, seller_id, shipping_address_snapshot, shipping_status, created_at) 
+         VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)`,
+        [
+          orderId, 
+          parseInt(String(sId || '0').replace(/\D/g, '') || '0', 10), 
+          shipping_address, 
+          'Pending'
+        ]
+      );
+      // Also record payment for this item (Legacy payments table)
       await client.query(
         `INSERT INTO payments 
         (order_id, customer_id, payment_method, amount, payment_status) 
         VALUES ($1, $2, $3, $4, $5)`,
         [
-          orderResult.rows[0].id || null,
+          orderId || null,
           user_id || null,
           payment_method || null,
           (numericPrice || 0) * (qty || 1),
           'Success'
         ]
       );
+      // Create Commission Record
+      try {
+        const commId = await generateNextId(client, 'seller_commissions', 'commission_id', 'COM');
+        const commissionRate = 10.00; // 10% default
+        let saleAmount = (numericPrice || 0) * (qty || 1);
+        if (isNaN(saleAmount)) saleAmount = 0;
+        
+        let commissionAmount = parseFloat((saleAmount * (commissionRate / 100)).toFixed(2));
+        if (isNaN(commissionAmount)) commissionAmount = 0;
+        
+        let sellerEarnings = parseFloat((saleAmount - commissionAmount).toFixed(2));
+        if (isNaN(sellerEarnings)) sellerEarnings = 0;
+
+        await client.query(
+          `INSERT INTO seller_commissions 
+           (commission_id, order_item_id, seller_id, order_id, sale_amount, commission_rate, commission_amount, seller_earnings, status, created_at) 
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, CURRENT_TIMESTAMP)`,
+          [
+            commId,
+            String(orderId),
+            String(sId || '0'),
+            String(orderId),
+            saleAmount,
+            commissionRate,
+            commissionAmount,
+            sellerEarnings,
+            'pending'
+          ]
+        );
+      } catch (commErr) {
+        console.error("Error storing commission:", commErr);
+        logErrorToFile(commErr, "Storing commission for order item " + (orderId || 'unknown'));
+        // We don't want to fail the whole order if commission recording fails, but we log it.
+      }
     }
 
     await client.query("DELETE FROM cart WHERE user_id=$1", [user_id]);
@@ -1340,52 +1799,83 @@ app.post("/api/orders", async (req, res) => {
     }
 
     await client.query("COMMIT");
-    
-    // Background Notification Task (Email & SMS) - Non-blocking
+
+    // Async trigger order confirmation (Matched exactly to cart logic)
     const { sendOrderConfirmation } = require('./notification_service');
-    
-    // Process notification after successful commit
-    const customerName = userRes.rows[0]?.name || "Customer";
-    let customerEmail = req.body.email || userRes.rows[0]?.email;
-    const customerPhone = req.body.phone || contactRes.rows[0]?.phone_number;
-
-    // Force fallback if dummy profile has no valid email so the test system still triggers BCC delivery
-    if (!customerEmail || typeof customerEmail !== 'string' || !(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customerEmail))) {
-      customerEmail = "agalyasrimurugan2000@gmail.com";
+    const userRes = await pool.query("SELECT name, email FROM customers WHERE id = $1", [user_id]);
+    let targetEmail = (userRes.rows.length > 0 && userRes.rows[0].email) ? userRes.rows[0].email : "";
+    if (!targetEmail || !(/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(targetEmail))) {
+      targetEmail = "agalyasrimurugan2000@gmail.com";
     }
+    const targetName = (userRes.rows.length > 0 && userRes.rows[0].name) ? userRes.rows[0].name : "Customer";
+    const customerPhone = req.body.phone || contactRes.rows[0]?.phone_number || "";
 
-    // 1 & 4) VALIDATION: Check email format and ensure it's not null/undefined
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (customerEmail && typeof customerEmail === 'string' && emailRegex.test(customerEmail)) {
-      console.log(`[Order Processing] Valid email verified for order ORD-${firstOrderId}: ${customerEmail}`);
-      
-      // 3 & 5) EMAIL TRIGGER & ERROR HANDLING
+    const rawTotal = String(total_amount || 0).replace(/[₹,$\s]/g, "");
+    const numericTotal = parseFloat(rawTotal);
+
+    if (targetEmail) {
+      console.log("Order Email Triggered");
+      console.log("Sending Order Confirmation Email to:", targetEmail);
       try {
         await sendOrderConfirmation({
           orderNumber: `ORD-${firstOrderId}`,
-          customerEmail: customerEmail, // 2) PASS CORRECT EMAIL
-          customerPhone,
-          customerName,
-          items,
-          total: parseFloat(total_amount),
+          customerEmail: targetEmail,
+          customerPhone: customerPhone,
+          customerName: targetName,
+          items: items,
+          total: isNaN(numericTotal) ? 0 : numericTotal,
           shippingAddress: shipping_address
         });
-        console.log(`[Order Processing] Order confirmation sent successfully to ${customerEmail}`);
       } catch (err) {
-        console.error(`[Order Processing] ERROR sending order confirmation email to ${customerEmail}:`, err);
-        // Do NOT break order flow if email fails
+        console.error(`[Order Processing] NOTIFICATION FAILURE for ${targetEmail}:`, err.message);
       }
-    } else {
-      console.log(`[Order Processing] Skipped sending confirmation email. Invalid or missing email address: ${customerEmail}`);
     }
-
-    res.json({ message: "Order placed successfully" });
+    return res.json({ message: "Order placed successfully" });
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("POST /api/orders - SQL Error:", err);
     res
       .status(500)
       .json({ message: "Error placing order", error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+app.put("/api/orders/:id/status", async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  if (!status) return res.status(400).json({ message: "Missing status" });
+
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const orderCheck = await client.query("SELECT * FROM orders WHERE id = $1", [id]);
+    if (orderCheck.rows.length === 0) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    // Update order status
+    await client.query("UPDATE orders SET order_status = $1 WHERE id = $2", [status, id]);
+
+    // Insert into status history
+    const nextHstId = await generateNextId(client, 'order_status_history', 'history_id', 'HST');
+    await client.query(
+      "INSERT INTO order_status_history (history_id, order_id, status, changed_by, changed_at) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP)",
+      [nextHstId, id, status, req.body.admin_id || 'ADMIN']
+    );
+
+    // Audit log
+    await logAudit(client, req.body.admin_id || 'ADMIN', 'orders', id, 'UPDATE_ORDER_STATUS', { old_status: orderCheck.rows[0].order_status }, { new_status: status });
+
+    await client.query("COMMIT");
+    res.json({ message: "Order status updated", status });
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("PUT /api/orders/:id/status error:", err);
+    res.status(500).json({ message: "Internal server error" });
   } finally {
     client.release();
   }
@@ -1485,7 +1975,289 @@ app.put("/api/contact", async (req, res) => {
   }
 });
 
+// ================= ADMIN & ANALYTICS =================
+app.get("/api/admin/general-stats", async (req, res) => {
+  try {
+    const custRes = await pool.query("SELECT COUNT(*) FROM customers");
+    const orderRes = await pool.query("SELECT COUNT(*) FROM orders");
+    const productRes = await pool.query("SELECT COUNT(*) FROM seller_products");
+    
+    // Use orders table for real-time revenue instead of finance tables
+    const revenueRes = await pool.query("SELECT SUM(total_amount) as total FROM orders");
+    
+    const activeRes = await pool.query("SELECT COUNT(*) FROM customers WHERE is_active = TRUE");
+
+    // Shipping and Returns
+    const shipRes = await pool.query("SELECT COUNT(*) FROM deliveries WHERE shipping_status = 'Pending' OR shipping_status = 'Shipped'");
+    const returnRes = await pool.query("SELECT COUNT(*) FROM reviews WHERE is_approved = FALSE"); // Assuming pending reviews as proxy or if there's a returns table
+
+    res.json({
+      totalUsers: parseInt(custRes.rows[0].count),
+      totalOrders: parseInt(orderRes.rows[0].count),
+      totalProducts: parseInt(productRes.rows[0].count),
+      totalRevenue: parseFloat(revenueRes.rows[0].total || 0),
+      activeUsers: parseInt(activeRes.rows[0].count),
+      totalShipping: parseInt(shipRes.rows[0].count),
+      totalReturns: parseInt(returnRes.rows[0].count)
+    });
+  } catch (err) {
+    console.error("GET /api/admin/general-stats error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// GET all orders for admin
+app.get("/api/admin-all-orders", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT o.*, s.name as seller_name, c.name as customer_name, c.email as customer_email
+      FROM orders o 
+      LEFT JOIN sellers s ON o.seller_id = s.id 
+      LEFT JOIN customers c ON o.user_id = c.id
+      ORDER BY o.created_at DESC
+    `);
+    
+    const mappedOrders = result.rows.map(o => ({
+        ...o,
+        user_name: o.customer_name
+    }));
+    
+    res.json(mappedOrders);
+  } catch (err) {
+    console.error("GET /api/admin-all-orders error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// GET all deliveries for admin
+app.get("/api/admin-all-deliveries", async (req, res) => {
+  try {
+    const result = await pool.query("SELECT * FROM deliveries ORDER BY created_at DESC");
+    res.json(result.rows);
+  } catch (err) {
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// GET all users for admin (Unified: Customers + Sellers + Admins)
+app.get("/api/admin-all-users", async (req, res) => {
+  try {
+    const custRes = await pool.query("SELECT id, name, email, 'user' as role, created_at, is_active FROM customers");
+    const sellerRes = await pool.query("SELECT id, name, email, 'seller' as role, created_at, is_active FROM sellers");
+    const adminRes = await pool.query("SELECT id, name, email, 'admin' as role, created_at, is_active FROM admins");
+    
+    const allUsers = [
+      ...custRes.rows.map(r => ({
+        id: r.id, name: r.name, email: r.email, role: r.role,
+        status: r.is_active ? 'active' : 'blocked',
+        joinDate: r.created_at
+      })),
+      ...sellerRes.rows.map(r => ({
+        id: r.id, name: r.name, email: r.email, role: r.role,
+        status: r.is_active ? 'active' : 'blocked',
+        joinDate: r.created_at
+      })),
+      ...adminRes.rows.map(r => ({
+        id: r.id, name: r.name, email: r.email, role: r.role,
+        status: r.is_active ? 'active' : 'blocked',
+        joinDate: r.created_at
+      }))
+    ];
+    res.json(allUsers);
+  } catch (err) {
+    console.error("GET /api/admin-all-users error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// Admin: Toggle User/Seller Status
+app.put("/api/admin/users/:id/status", async (req, res) => {
+  const { id } = req.params;
+  const { status, role } = req.body;
+  const isActive = status === 'active';
+  let table = 'customers';
+  if (role === 'seller') table = 'sellers';
+  else if (role === 'admin') table = 'admins';
+
+  try {
+    await pool.query(`UPDATE ${table} SET is_active = $1 WHERE id = $2`, [isActive, id]);
+    res.json({ message: "User status updated" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Error updating user status" });
+  }
+});
+
+// Admin: Delete User/Seller
+app.delete("/api/admin/users/:id", async (req, res) => {
+  const { id } = req.params;
+  const { role } = req.query;
+  let table = 'customers';
+  if (role === 'seller') table = 'sellers';
+  else if (role === 'admin') table = 'admins';
+
+  try {
+    await pool.query(`DELETE FROM ${table} WHERE id = $1`, [id]);
+    res.json({ message: "User deleted successfully" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Error deleting user" });
+  }
+});
+
+// Admin: Delete Order
+app.delete("/api/admin/orders/:id", async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query("DELETE FROM orders WHERE id = $1", [id]);
+    res.json({ message: "Order deleted successfully" });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Error deleting order" });
+  }
+});
+// GET all payments for admin
+app.get("/api/admin-all-payments", async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT p.*, c.name as customer_name 
+      FROM payments p 
+      LEFT JOIN customers c ON p.customer_id = c.id 
+      ORDER BY p.created_at DESC
+    `);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("GET /api/admin-all-payments error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+app.get("/api/analytics/revenue", async (req, res) => {
+  const { period } = req.query; // 'weekly', 'monthly', 'annual'
+  let query = "";
+  
+  if (period === 'weekly') {
+    query = "SELECT week_number as label, SUM(total_revenue) as value FROM weekly_finances GROUP BY week_number ORDER BY week_number";
+  } else if (period === 'monthly') {
+    query = "SELECT month_number as label, SUM(total_revenue) as value FROM monthly_finances GROUP BY month_number ORDER BY month_number";
+  } else if (period === 'quarterly') {
+    query = "SELECT quarter_number as label, SUM(total_revenue) as value FROM quarterly_finances GROUP BY quarter_number ORDER BY quarter_number";
+  } else {
+    query = "SELECT year as label, SUM(total_revenue) as value FROM annual_finances GROUP BY year ORDER BY year";
+  }
+
+  try {
+    const result = await pool.query(query);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("GET /api/analytics/revenue error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+app.get("/api/seller/stats/:sellerId", async (req, res) => {
+  const sellerId = normalizeId('seller', req.params.sellerId);
+  try {
+    const revenueRes = await pool.query("SELECT SUM(total_revenue) as total FROM annual_finances WHERE seller_id = $1", [sellerId]);
+    const salesRes = await pool.query("SELECT COUNT(*) FROM orders WHERE seller_id = $1", [sellerId]);
+    const productRes = await pool.query("SELECT COUNT(*) FROM seller_products WHERE seller_id = $1", [sellerId]);
+    const lowStockRes = await pool.query("SELECT COUNT(*) FROM seller_products WHERE seller_id = $1 AND stock > 0 AND stock <= 10", [sellerId]);
+
+    const revenue = revenueRes.rows[0]?.total || 0;
+    const salesCount = salesRes.rows[0]?.count || 0;
+    const productCount = productRes.rows[0]?.count || 0;
+    const lowStockCount = lowStockRes.rows[0]?.count || 0;
+
+    res.json({
+      totalRevenue: parseFloat(revenue),
+      totalSales: parseInt(salesCount),
+      totalProducts: parseInt(productCount),
+      lowStockCount: parseInt(lowStockCount)
+    });
+  } catch (err) {
+    console.error("GET /api/seller/stats error:", err);
+    logErrorToFile(err, "GET /api/seller/stats/" + sellerId);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+app.get("/api/seller/analytics/:sellerId", async (req, res) => {
+  const sellerId = normalizeId('seller', req.params.sellerId);
+  const { period } = req.query;
+  let query = "";
+  
+  if (period === 'weekly') {
+    query = "SELECT week_number as label, total_revenue as value FROM weekly_finances WHERE seller_id = $1 ORDER BY week_number";
+  } else if (period === 'monthly') {
+    query = "SELECT month_number as label, total_revenue as value FROM monthly_finances WHERE seller_id = $1 ORDER BY month_number";
+  } else if (period === 'quarterly') {
+    query = "SELECT quarter_number as label, total_revenue as value FROM quarterly_finances WHERE seller_id = $1 ORDER BY quarter_number";
+  } else {
+    query = "SELECT year as label, total_revenue as value FROM annual_finances WHERE seller_id = $1 ORDER BY year";
+  }
+
+  try {
+    const result = await pool.query(query, [sellerId]);
+    res.json(result.rows);
+  } catch (err) {
+    console.error("GET /api/seller/analytics error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+app.get("/api/seller/reviews/:sellerId", async (req, res) => {
+  const sellerId = normalizeId('seller', req.params.sellerId);
+  try {
+    const result = await pool.query(
+      `SELECT r.*, p.name as product_name
+       FROM reviews r
+       JOIN seller_products p ON r.product_id = p.id
+       WHERE p.seller_id = $1
+       ORDER BY r.created_at DESC`,
+      [sellerId]
+    );
+    
+    // Map database fields to the frontend expected format
+    const mappedReviews = result.rows.map(r => ({
+      id: r.review_id,
+      customer: r.reviewer_name || "Anonymous",
+      customerAvatar: (r.reviewer_name || "A")[0].toUpperCase(),
+      product: r.product_name,
+      productId: r.product_id,
+      orderId: r.order_id,
+      rating: r.rating,
+      comment: r.body,
+      date: new Date(r.created_at).toISOString().split('T')[0],
+      helpful: 0,
+      replied: false,
+      replyText: "",
+      verified: true
+    }));
+    
+    res.json(mappedReviews);
+  } catch (err) {
+    console.error("GET /api/seller/reviews error:", err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 // End of review section (moved)
+
+
+// ================= DEBUG =================
+app.get("/api/debug/db-inspect", async (req, res) => {
+  try {
+    const sellers = await pool.query("SELECT id, name, created_at, is_active FROM seller_products ORDER BY created_at DESC LIMIT 5");
+    const admins = await pool.query("SELECT id, name, created_at, is_active FROM admin_products ORDER BY created_at DESC LIMIT 5");
+    res.json({
+      timestamp: new Date().toISOString(),
+      seller_products: sellers.rows,
+      admin_products: admins.rows
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ================= 404 =================
 app.use((req, res) => {

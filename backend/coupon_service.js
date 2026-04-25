@@ -48,6 +48,13 @@ async function processOrderCoupons(client, items, total_amount, first_order_id, 
             (order_id, coupon_id, customer_id, discount_amount, created_at, updated_at) 
             VALUES ($1, $2, $3, $4, NOW(), NOW())
           `, [first_order_id, couponId, user_id, accurateDiscount]);
+
+          // Also record in coupon_usage for tracking
+          const usageId = "USG-" + Date.now() + "-" + Math.floor(Math.random() * 1000);
+          await client.query(`
+            INSERT INTO coupon_usage (usage_id, coupon_id, customer_id, order_id)
+            VALUES ($1, $2, $3, $4)
+          `, [usageId, couponId, user_id, first_order_id]);
           
           console.log(`[Coupon Service] Successfully mapped ${appliedCode} -> Order ID ${first_order_id} ($${accurateDiscount.toFixed(2)})`);
         }

@@ -1,5 +1,7 @@
-import React, { useState } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { Container, Row, Col } from "react-bootstrap";
+import { useProducts, normalizeCategoryForShop } from "../context/ProductContext";
+import { useStore } from "../context/StoreContext";
 import {
   FaShoppingBag,
   FaHeart,
@@ -808,9 +810,53 @@ const CSS = `
 `;
 
 export default function New_arrivals() {
-  const [wishlist, setWishlist] = useState([]);
+  const [productsFromApi, setProductsFromApi] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // Direct fetch from API as requested
+  const fetchLocalProducts = useCallback(async () => {
+    try {
+      const response = await fetch("http://localhost:5000/api/products");
+      if (response.ok) {
+        const data = await response.json();
+        console.log("API Response (New arrivals):", data);
+        setProductsFromApi(data);
+      }
+    } catch (err) {
+      console.error("Local fetch error in New arrivals:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchLocalProducts();
+  }, [fetchLocalProducts]);
+
+  const displayProducts = useMemo(() => {
+    // Combine fetched products with static ones
+    const backendNew = productsFromApi.map(p => ({
+      ...p,
+      image: p.image?.startsWith("/") ? `http://localhost:5000${p.image}` : (p.image || ""),
+      images: Array.isArray(p.images) ? p.images : (p.image_url ? p.image_url.split(",").map(i => i.trim().startsWith("/") ? `http://localhost:5000${i.trim()}` : i.trim()) : [p.image?.startsWith("/") ? `http://localhost:5000${p.image}` : (p.image || "")]),
+      price: typeof p.price === 'number' ? `₹${p.price.toLocaleString("en-IN")}` : p.price,
+      originalPrice: typeof p.mrp === 'number' ? `₹${p.mrp.toLocaleString("en-IN")}` : (p.originalPrice || `₹${p.price}`),
+      rating: p.rating || 4.5,
+      reviews: p.reviews || 0,
+      tag: p.tag || "JUST DROPPED",
+      tagStyle: p.tagStyle || { bg: "#1a0e2e", color: "#c4a8e0" },
+      offer: p.offers || p.offer || p.discount || "",
+      colors: Array.isArray(p.colors) ? p.colors : (p.available_colors ? p.available_colors.split(",").map(c => c.trim()) : []),
+      sizes: Array.isArray(p.sizes) ? p.sizes : (p.available_sizes ? p.available_sizes.split(",").map(s => s.trim()) : []),
+      colorNames: Array.isArray(p.colorNames) ? p.colorNames : (p.available_colors ? p.available_colors.split(",").map(c => c.trim()) : []),
+      category: normalizeCategoryForShop(p.category),
+    }));
+    console.log("Products State (New arrivals):", backendNew);
+    return [...backendNew, ...products];
+  }, [productsFromApi]);
+
+  const { addToCart, toggleWishlist: storeToggleWishlist, isInWishlist: storeIsInWishlist } = useStore();
   const [addedItems, setAddedItems] = useState({});
-  const [toast, setToast] = useState(null);
   const [detailProduct, setDetailProduct] = useState(null);
   const [detailVisible, setDetailVisible] = useState(false);
   const [detailAnim, setDetailAnim] = useState("entering");
@@ -820,23 +866,17 @@ export default function New_arrivals() {
   const [qty, setQty] = useState(1);
   const [addedDetail, setAddedDetail] = useState(false);
 
-  const showToast = (msg) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2200);
-  };
 
-  const toggleWishlist = (id, e) => {
-    if (e) e.stopPropagation();
-    const isWished = wishlist.includes(id);
-    setWishlist((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
-    showToast(isWished ? "Removed from wishlist" : "Added to wishlist ♥");
-  };
+
+
 
   const handleAddToCart = (item, quantity = 1, fromDetail = false) => {
+    addToCart({
+      ...item,
+      price: parseFloat(String(item.price).replace(/[₹,]/g, "")),
+      quantity
+    });
     setAddedItems((prev) => ({ ...prev, [item.id]: true }));
-    showToast(`${item.name} added to cart! ✓`);
     setTimeout(
       () => setAddedItems((prev) => ({ ...prev, [item.id]: false })),
       1600,
@@ -897,7 +937,7 @@ export default function New_arrivals() {
     ));
 
   const DetailPage = ({ p }) => {
-    const isWished = wishlist.includes(p.id);
+    const isWished = storeIsInWishlist(p.id);
     const tagStyle = p.tagStyle || { bg: "#1a1a2e", color: "#fff" };
     const similar = getSimilar(p);
     const bars = ratingBars(p);
@@ -911,7 +951,7 @@ export default function New_arrivals() {
           <span className="pdp-nav-title">{p.name}</span>
           <button
             className={`pdp-nav-wish ${isWished ? "wished" : ""}`}
-            onClick={() => toggleWishlist(p.id)}
+            onClick={() => storeToggleWishlist(p)}
           >
             {isWished ? <FaHeart size={13} /> : <FaRegHeart size={13} />}
             {isWished ? "Wishlisted" : "Wishlist"}
@@ -978,7 +1018,9 @@ export default function New_arrivals() {
                 <div className="pdp-prices">
                   <span className="pdp-price">{p.price}</span>
                   <span className="pdp-orig-price">{p.originalPrice}</span>
-                  <span className="pdp-disc-badge">{p.discount} OFF</span>
+                  {(p.discount || p.offer || p.offers) && (p.discount !== "0" && p.offer !== "0" && p.offers !== "0") && (
+                    <span className="pdp-disc-badge">{p.discount || p.offer || p.offers} OFF</span>
+                  )}
                 </div>
                 <p className="pdp-save">
                   You save ₹{savings(p).toLocaleString("en-IN")}
@@ -997,7 +1039,12 @@ export default function New_arrivals() {
                     <button
                       key={i}
                       className={`pdp-color-opt ${selColor === i ? "active" : ""}`}
-                      onClick={() => setSelColor(i)}
+                      onClick={() => {
+                        setSelColor(i);
+                        if (p.images && p.images[i] !== undefined) {
+                          setMainImg(i);
+                        }
+                      }}
                     >
                       <div
                         className="pdp-color-swatch"
@@ -1241,7 +1288,7 @@ export default function New_arrivals() {
   return (
     <>
       <style>{CSS}</style>
-      {toast && <div className="toast-notif">{toast}</div>}
+
 
       {detailVisible && detailProduct && <DetailPage p={detailProduct} />}
 
@@ -1262,9 +1309,9 @@ export default function New_arrivals() {
           <div className="na-divider" />
 
           <Row className="g-4">
-            {products.map((p, idx) => {
+            {displayProducts.slice(0, 8).map((p, idx) => {
               const isAdded = addedItems[p.id];
-              const isWished = wishlist.includes(p.id);
+              const isWished = storeIsInWishlist(p.id);
 
               return (
                 <Col key={p.id} xs={12} sm={6} lg={3}>
@@ -1286,7 +1333,7 @@ export default function New_arrivals() {
                       </span>
                       <button
                         className="na-wish"
-                        onClick={(e) => toggleWishlist(p.id, e)}
+                        onClick={(e) => { e.stopPropagation(); storeToggleWishlist(p); }}
                       >
                         {isWished ? (
                           <FaHeart color="#e87e7e" size={12} />
@@ -1318,7 +1365,9 @@ export default function New_arrivals() {
                       <div className="na-prices">
                         <span className="na-price">{p.price}</span>
                         <span className="na-orig">{p.originalPrice}</span>
-                        <span className="na-disc">{p.discount} OFF</span>
+                        {(p.discount || p.offer || p.offers) && (p.discount !== "0" && p.offer !== "0" && p.offers !== "0") && (
+                          <span className="na-off">{p.discount || p.offer || p.offers} off</span>
+                        )}
                       </div>
 
                       <button

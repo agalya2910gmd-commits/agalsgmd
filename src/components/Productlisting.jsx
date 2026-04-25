@@ -20,10 +20,12 @@ import {
   FaBolt,
   FaTag,
   FaClock,
+  FaInfoCircle,
 } from "react-icons/fa";
 import { useStore } from "../context/StoreContext";
+import { useProducts, normalizeCategoryForShop } from "../context/ProductContext";
 
-const products = [
+const staticProducts = [
   {
     id: 1,
     name: "Oversized Linen Blazer",
@@ -43,6 +45,7 @@ const products = [
     colors: ["#D4A96A", "#2C3E50", "#ECE9E4"],
     colorNames: ["Camel", "Navy", "Ivory"],
     sizes: ["XS", "S", "M", "L", "XL"],
+    sizeStock: { XS: 3, S: 7, M: 12, L: 5, XL: 2 },
     description:
       "Crafted from 100% premium European linen, this oversized blazer brings effortless sophistication to any wardrobe. The relaxed silhouette drapes beautifully, offering a contemporary take on classic tailoring.",
     material: "100% Premium Linen",
@@ -102,6 +105,7 @@ const products = [
     colors: ["#C2A87A", "#6B7280", "#1C1C1C"],
     colorNames: ["Khaki", "Grey", "Black"],
     sizes: ["28", "30", "32", "34", "36", "38"],
+    sizeStock: { 28: 0, 30: 4, 32: 8, 34: 6, 36: 2, 38: 1 },
     description:
       "Premium slim fit chinos made from stretch cotton fabric for maximum comfort. Mid-rise waist with a tapered leg—versatile enough to go from boardroom to weekend brunch.",
     material: "98% Cotton, 2% Elastane",
@@ -161,6 +165,7 @@ const products = [
     colors: ["#FFFFFF", "#1A3A5C", "#2E8B57"],
     colorNames: ["White", "Navy", "Forest"],
     sizes: ["S", "M", "L", "XL", "XXL"],
+    sizeStock: { S: 15, M: 22, L: 18, XL: 9, XXL: 4 },
     description:
       "Classic polo shirt with premium pique cotton fabric. Features a comfortable regular fit and durable two-button placket. Knitted collar and cuffs retain their shape wash after wash.",
     material: "100% Combed Pique Cotton",
@@ -220,6 +225,7 @@ const products = [
     colors: ["#4A6FA5", "#1C1C2E", "#8B9DC3"],
     colorNames: ["Light Wash", "Dark Wash", "Stone Wash"],
     sizes: ["S", "M", "L", "XL"],
+    sizeStock: { S: 2, M: 6, L: 4, XL: 1 },
     description:
       "A timeless wardrobe staple reimagined with a premium enzyme wash for that perfectly broken-in look from day one. 100% cotton denim.",
     material: "100% Cotton Denim",
@@ -278,6 +284,7 @@ const products = [
     colors: ["#F5E6D3", "#8B4513", "#4A4A4A"],
     colorNames: ["Cream", "Brown", "Charcoal"],
     sizes: ["S", "M", "L", "XL", "XXL"],
+    sizeStock: { S: 8, M: 14, L: 11, XL: 6, XXL: 3 },
     description:
       "A contemporary kurta set in breathable cotton-linen with hand-block printed accents at the hem and cuffs. Comes with matching straight-cut pyjamas.",
     material: "70% Cotton, 30% Linen",
@@ -337,6 +344,7 @@ const products = [
     colors: ["#1C1C1C", "#556B2F", "#8B0000"],
     colorNames: ["Jet Black", "Olive", "Burgundy"],
     sizes: ["S", "M", "L", "XL"],
+    sizeStock: { S: 5, M: 9, L: 7, XL: 3 },
     description:
       "Street-meets-structure in this premium bomber jacket. Crafted from a technical twill shell with satin lining.",
     material: "92% Polyester, 8% Spandex Shell",
@@ -396,6 +404,7 @@ const products = [
     colors: ["#F5E6D3", "#8B4513", "#DAA520"],
     colorNames: ["Ivory", "Chocolate", "Gold"],
     sizes: ["S", "M", "L", "XL", "XXL"],
+    sizeStock: { S: 4, M: 7, L: 5, XL: 3, XXL: 1 },
     description:
       "An heirloom-quality sherwani embroidered by master artisans with zari threadwork. Crafted from pure raw silk.",
     material: "Pure Raw Silk with Zari Work",
@@ -455,6 +464,7 @@ const products = [
     colors: ["#2C2C2C", "#5C3A1A", "#1E3A5F"],
     colorNames: ["Matte Black", "Cognac", "Midnight Blue"],
     sizes: ["S", "M", "L", "XL"],
+    sizeStock: { S: 1, M: 3, L: 2, XL: 0 },
     description:
       "Full-grain vegetable-tanned leather, asymmetric front zip — built to become your most-reached-for piece.",
     material: "100% Full-Grain Genuine Leather",
@@ -497,7 +507,10 @@ const products = [
   },
 ];
 
-const parsePrice = (s) => parseFloat(s.replace(/[₹,]/g, ""));
+const parsePrice = (s) => {
+  if (typeof s !== "string") return parseFloat(s || 0);
+  return parseFloat(s.replace(/[₹,]/g, "")) || 0;
+};
 
 // ── UPDATED: Gold & Black tag styles ──
 const tagStyles = {
@@ -559,7 +572,7 @@ const css = `
   .pl-prices{display:flex;align-items:baseline;gap:6px;margin-bottom:8px;flex-wrap:wrap}
   .pl-price{font-family:'Playfair Display',serif;font-size:15px;font-weight:700;color:var(--dark);transition:color .2s}
   .pl-orig{font-size:11px;color:#bbb;text-decoration:line-through}
-  .pl-disc{font-size:10px;color:var(--success);font-weight:600;letter-spacing:.5px;transition:color .2s}
+  .pl-disc{font-size:10px;color:#000;font-weight:700;letter-spacing:.5px;transition:color .2s}
   .pl-cart{width:100%;padding:6px 0;background:transparent;border:1px solid var(--dark);color:var(--dark);font-family:'Jost',sans-serif;font-size:9px;letter-spacing:2px;text-transform:uppercase;cursor:pointer;border-radius:4px;transition:background .25s,color .25s,border-color .25s;margin-top:auto;display:flex;align-items:center;justify-content:center;gap:6px}
   .pl-cart:hover{background:var(--dark);color:#F8F5F0}
   .pl-cart.added{background:var(--gold);color:#fff;border-color:var(--gold)}
@@ -567,6 +580,39 @@ const css = `
   .heart-inactive{color:#bbb}
   .toast-notif{position:fixed;bottom:20px;right:20px;background:var(--gold);color:#fff;padding:12px 20px;border-radius:8px;font-size:13px;font-family:'Jost',sans-serif;z-index:9999;animation:slideIn .3s ease;box-shadow:0 4px 12px rgba(0,0,0,.15)}
   @keyframes slideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+
+  /* Size Notification Toast */
+  .size-notification{
+    position:fixed;bottom:30px;left:50%;transform:translateX(-50%);
+    background:var(--dark);color:var(--gold);padding:12px 24px;
+    border-radius:40px;font-size:13px;font-weight:500;
+    z-index:10000;animation:slideUpFade 2.5s ease forwards;
+    box-shadow:0 4px 15px rgba(0,0,0,0.2);display:flex;align-items:center;
+    gap:10px;font-family:'Jost',sans-serif;white-space:nowrap;
+  }
+  .size-notification.out-of-stock{background:#c0392b;color:#fff}
+  .size-notification.low-stock{background:#e67e22;color:#fff}
+  .size-notification.available{background:#27ae60;color:#fff}
+  @keyframes slideUpFade{
+    0%{opacity:0;transform:translateX(-50%) translateY(20px)}
+    15%{opacity:1;transform:translateX(-50%) translateY(0)}
+    85%{opacity:1;transform:translateX(-50%) translateY(0)}
+    100%{opacity:0;transform:translateX(-50%) translateY(-10px)}
+  }
+
+  /* Out of stock size button style */
+  .pdp-sbtn.out-of-stock{
+    opacity:0.5;
+    background:#f5f5f5;
+    border-color:#ddd;
+    cursor:not-allowed;
+    text-decoration:line-through;
+    position:relative;
+  }
+  .pdp-sbtn.out-of-stock:hover{
+    border-color:#ddd;
+    transform:none;
+  }
 
   /* ═══════════════ DETAIL OVERLAY ═══════════════ */
   .pdp-overlay{
@@ -820,6 +866,23 @@ const css = `
     .pdp-hl-grid{grid-template-columns:repeat(2,1fr)}
     .pdp-style-grid{grid-template-columns:1fr}
   }
+
+  /* REVIEW FORM CSS IMPORTED FROM SHOP PAGE */
+  .pdp-review-form-wrap { background:var(--light,#f8f8f5); border-radius:12px; padding:18px 20px; margin-bottom:16px; border:1px solid var(--border,#e8e0d5); }
+  .pdp-review-form { display:flex; flex-direction:column; gap:10px; }
+  .pdp-rf-row { display:flex; flex-direction:column; gap:4px; }
+  .pdp-rf-label { font-size:11.5px; font-weight:600; color:var(--dark,#1a1a1a); letter-spacing:.5px; text-align:left; }
+  .pdp-rf-stars { display:flex; align-items:center; }
+  .pdp-rf-input { width:100%; padding:8px 11px; border:1px solid var(--border,#e0d8ce); border-radius:7px; font-family:'Jost',sans-serif; font-size:12.5px; background:#fff; color:var(--dark); outline:none; transition:border-color .2s; }
+  .pdp-rf-input:focus { border-color:var(--gold,#B5975A); }
+  .pdp-rf-textarea { width:100%; padding:8px 11px; border:1px solid var(--border,#e0d8ce); border-radius:7px; font-family:'Jost',sans-serif; font-size:12.5px; background:#fff; color:var(--dark); outline:none; resize:vertical; transition:border-color .2s; }
+  .pdp-rf-textarea:focus { border-color:var(--gold,#B5975A); }
+  .pdp-rf-submit { align-self:flex-start; padding:9px 22px; background:var(--gold,#B5975A); color:#0F0F0F; border:none; border-radius:7px; font-family:'Jost',sans-serif; font-size:11px; font-weight:700; letter-spacing:2px; text-transform:uppercase; cursor:pointer; transition:background .2s,transform .18s; }
+  .pdp-rf-submit:hover:not(:disabled) { background:#a0814a; transform:translateY(-1px); }
+  .pdp-rf-submit:disabled { opacity:.6; cursor:not-allowed; }
+  .pdp-rf-msg { font-size:12px; padding:8px 12px; border-radius:6px; font-family:'Jost',sans-serif; }
+  .pdp-rf-msg.success { background:#e8f5e9; color:#2e7d32; border:1px solid #c8e6c9; }
+  .pdp-rf-msg.error { background:#fce4ec; color:#b71c1c; border:1px solid #f8bbd0; }
 `;
 
 /* ═══════════════════════════════ DetailPage ═══════════════════════════════ */
@@ -832,13 +895,51 @@ const DetailPage = ({
   isInWishlist,
   onProductClick,
   recentlyViewed,
+  allProducts,
 }) => {
+  // Normalize data from new backend fields if older fields are missing
+  if (product && (!product.sizes || product.sizes.length === 0)) {
+    if (product.available_sizes) {
+      product.sizes = product.available_sizes.split(",").map((s) => s.trim());
+    } else {
+      product.sizes = ["S", "M", "L", "XL"];
+    }
+  }
+  if (product && (!product.colors || product.colors.length === 0)) {
+    if (product.available_colors) {
+      product.colors = product.available_colors.split(",").map((c) => c.trim());
+      product.colorNames = product.colors;
+    } else {
+      product.colors = ["Standard"];
+      product.colorNames = ["Standard"];
+    }
+  }
+  if (product && !product.images) {
+    product.images = [product.image];
+  }
+  if (product && !product.originalPrice) {
+    product.originalPrice = product.mrp || product.price;
+  }
+  if (product && !product.discount && (product.offers || product.offer)) {
+    product.discount = product.offers || product.offer;
+  }
+
   const navigate = useNavigate();
   const [mainImg, setMainImg] = useState(0);
   const [selColor, setSelColor] = useState(0);
   const [selSize, setSelSize] = useState(null);
   const [qty, setQty] = useState(1);
   const [cartAdded, setCartAdded] = useState(false);
+  const [sizeNotification, setSizeNotification] = useState(null);
+
+  // Reviews Add State
+  const [reviewForm, setReviewForm] = useState({
+    rating: 5,
+    title: "",
+    body: "",
+  });
+  const [reviewSubmitting, setReviewSubmitting] = useState(false);
+  const [reviewMsg, setReviewMsg] = useState({ text: "", type: "" });
 
   const zoomRef = useRef(null);
   const lensRef = useRef(null);
@@ -850,6 +951,54 @@ const DetailPage = ({
   const tagSt = tagStyles[product.tag] || { bg: "#B5975A", color: "#0F0F0F" };
   const isWish = isInWishlist(product.id);
   const saving = parsePrice(product.originalPrice) - parsePrice(product.price);
+
+  // Helper function to get stock for a size
+  const getStockForSize = (size) => {
+    if (!product.sizeStock) return null;
+    return product.sizeStock[size] !== undefined
+      ? product.sizeStock[size]
+      : null;
+  };
+
+  // Handle size click with stock notification
+  const handleSizeClick = (size) => {
+    const stock = getStockForSize(size);
+
+    if (stock === 0) {
+      // Out of stock
+      setSizeNotification({
+        message: `❌ Size ${size} is out of stock!`,
+        type: "out-of-stock",
+      });
+      setTimeout(() => setSizeNotification(null), 2500);
+      return;
+    }
+
+    if (stock !== null && stock > 0 && stock <= 3) {
+      // Low stock warning
+      setSizeNotification({
+        message: `⚠️ Only ${stock} left in size ${size}! Hurry up!`,
+        type: "low-stock",
+      });
+      setTimeout(() => setSizeNotification(null), 2500);
+    } else if (stock !== null && stock > 0) {
+      // In stock
+      setSizeNotification({
+        message: `✅ Size ${size} is available (${stock} in stock)`,
+        type: "available",
+      });
+      setTimeout(() => setSizeNotification(null), 2000);
+    } else {
+      // No stock info available
+      setSizeNotification({
+        message: `📏 Size ${size} selected`,
+        type: "available",
+      });
+      setTimeout(() => setSizeNotification(null), 1500);
+    }
+
+    setSelSize(size);
+  };
 
   const stars = (r, sz = 12) =>
     Array.from({ length: 5 }, (_, i) => (
@@ -863,7 +1012,7 @@ const DetailPage = ({
       />
     ));
 
-  const similar = products
+  const similar = (allProducts || staticProducts)
     .filter((x) => x.category === product.category && x.id !== product.id)
     .slice(0, 4);
   const rvList = recentlyViewed.filter((p) => p.id !== product.id).slice(0, 4);
@@ -876,15 +1025,49 @@ const DetailPage = ({
   ];
 
   const handleCart = () => {
+    // Check if selected size is out of stock before adding to cart
+    if (selSize && getStockForSize(selSize) === 0) {
+      setSizeNotification({
+        message: `❌ Cannot add: ${selSize} is out of stock!`,
+        type: "out-of-stock",
+      });
+      setTimeout(() => setSizeNotification(null), 2000);
+      return;
+    }
     onAddToCart(product, qty, true);
     setCartAdded(true);
     setTimeout(() => setCartAdded(false), 1600);
   };
 
+  const handleReviewSubmit = (e) => {
+    e.preventDefault();
+    if (!reviewForm.body.trim()) {
+      setReviewMsg({ text: "Review comment is required.", type: "error" });
+      return;
+    }
+    setReviewSubmitting(true);
+    setReviewMsg({ text: "", type: "" });
+    setTimeout(() => {
+      setReviewMsg({ text: "Review submitted! Thank you.", type: "success" });
+      setReviewForm({ rating: 5, title: "", body: "" });
+      setReviewSubmitting(false);
+    }, 800);
+  };
+
   const handleBuyNow = () => {
+    // Check if selected size is out of stock before buying
+    if (selSize && getStockForSize(selSize) === 0) {
+      setSizeNotification({
+        message: `❌ Cannot buy: ${selSize} is out of stock!`,
+        type: "out-of-stock",
+      });
+      setTimeout(() => setSizeNotification(null), 2000);
+      return;
+    }
     onAddToCart(product, qty, false);
     navigate("/checkout");
   };
+
   const handlePClick = (p) => {
     onProductClick(p);
     setMainImg(0);
@@ -915,8 +1098,6 @@ const DetailPage = ({
     ll = Math.min(Math.max(ll, 0), r.width - lw);
     lt = Math.min(Math.max(lt, 0), r.height - lh);
     lensRef.current.style.transform = `translate3d(${ll}px,${lt}px,0)`;
-    // Map cursor position (0-1) directly to background-position (0%-100%)
-    // so the zoomed preview shows exactly what is under the cursor
     previewRef.current.style.backgroundPosition = `${rx * 100}% ${ry * 100}%`;
   };
   const onMove = (e) => {
@@ -956,6 +1137,13 @@ const DetailPage = ({
 
   return (
     <div className={`pdp-overlay ${detailAnim}`} ref={overlayRef}>
+      {/* Size Notification Toast */}
+      {sizeNotification && (
+        <div className={`size-notification ${sizeNotification.type}`}>
+          <FaInfoCircle size={14} /> {sizeNotification.message}
+        </div>
+      )}
+
       {/* Nav */}
       <div className="pdp-nav">
         <button className="pdp-back-btn" onClick={onClose}>
@@ -987,7 +1175,7 @@ const DetailPage = ({
         {/* Left: thumbnails + main image (sticky) */}
         <div className="pdp-gcol">
           <div className="pdp-thumbs">
-            {product.images.map((img, i) => (
+            {(product.images || []).map((img, i) => (
               <div
                 key={i}
                 className={`pdp-thumb ${mainImg === i ? "active" : ""}`}
@@ -1050,7 +1238,36 @@ const DetailPage = ({
           {product.discount && saving > 0 && (
             <div className="pdp-offer-band">
               <span className="pdp-offer-pill">{product.discount}</span>
-              <span className="pdp-offer-text">Limited time offer — save ₹{saving.toLocaleString("en-IN")} on this item</span>
+              <span className="pdp-offer-text">
+                Limited time offer — save ₹{saving.toLocaleString("en-IN")} on
+                this item
+              </span>
+            </div>
+          )}
+
+          {/* Coupon Info */}
+          {product.coupon_details && (
+            <div 
+              style={{
+                background: "#f0fdf4",
+                border: "1px dashed #22c55e",
+                borderRadius: 10,
+                padding: "10px 14px",
+                marginTop: 14,
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center"
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 10, color: "#16a34a", fontWeight: 700, textTransform: "uppercase" }}>Coupon Available</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#14532d" }}>
+                  {typeof product.coupon_details === 'string' ? product.coupon_details : "Check coupon at checkout"}
+                </div>
+              </div>
+              <div style={{ background: "#dcfce7", color: "#15803d", padding: "4px 10px", borderRadius: 6, fontWeight: 800, fontSize: 12 }}>
+                ADD
+              </div>
             </div>
           )}
           <div className="pdp-stock">
@@ -1065,35 +1282,44 @@ const DetailPage = ({
           {/* Colors */}
           <div className="pdp-lbl">Select Colors</div>
           <div className="pdp-clist">
-            {product.colors.map((c, i) => (
+            {(product.colors || []).map((c, i) => (
               <button
                 key={i}
                 className={`pdp-copt ${selColor === i ? "active" : ""}`}
                 onClick={() => {
                   setSelColor(i);
-                  if (product.colorImages && product.colorImages[i] !== undefined) {
+                  if (
+                    product.colorImages &&
+                    product.colorImages[i] !== undefined
+                  ) {
                     setMainImg(product.colorImages[i]);
+                  } else if (product.images && product.images[i] !== undefined) {
+                    setMainImg(i);
                   }
                 }}
               >
                 <div className="pdp-csw" style={{ backgroundColor: c }} />
-                <span className="pdp-cname">{product.colorNames[i]}</span>
+                <span className="pdp-cname">{(product.colorNames || [])[i] || c}</span>
               </button>
             ))}
           </div>
 
-          {/* Sizes */}
+          {/* Sizes - WITH STOCK NOTIFICATION ON CLICK */}
           <div className="pdp-lbl">Choose Size</div>
           <div className="pdp-slist">
-            {product.sizes.map((s) => (
-              <button
-                key={s}
-                className={`pdp-sbtn ${selSize === s ? "active" : ""}`}
-                onClick={() => setSelSize(s)}
-              >
-                {s}
-              </button>
-            ))}
+            {(product.sizes || []).map((s) => {
+              const stock = getStockForSize(s);
+              const isOutOfStock = stock === 0;
+              return (
+                <button
+                  key={s}
+                  className={`pdp-sbtn ${selSize === s ? "active" : ""} ${isOutOfStock ? "out-of-stock" : ""}`}
+                  onClick={() => handleSizeClick(s)}
+                >
+                  {s} {isOutOfStock && "(Out of Stock)"}
+                </button>
+              );
+            })}
           </div>
 
           {/* Qty */}
@@ -1145,17 +1371,16 @@ const DetailPage = ({
 
       {/* ═══ BELOW: Reviews → Similar → Recently Viewed ═══ */}
       <div className="pdp-below">
-
         {/* ══ TOP HIGHLIGHTS ══ */}
         {(() => {
           const hlItems = [
-            { label: 'Material', value: product.material },
-            { label: 'Brand', value: product.brand },
-            { label: 'Care', value: product.care },
-            { label: 'Collection', value: product.collection },
-            { label: 'Metal Type', value: product.metalType },
-            { label: 'Country of Origin', value: product.country },
-          ].filter(h => h.value);
+            { label: "Material", value: product.material },
+            { label: "Brand", value: product.brand },
+            { label: "Care", value: product.care },
+            { label: "Collection", value: product.collection },
+            { label: "Metal Type", value: product.metalType },
+            { label: "Country of Origin", value: product.country },
+          ].filter((h) => h.value);
           return hlItems.length > 0 ? (
             <div className="pdp-info-section">
               <div className="pdp-section-heading">🏷️ Top Highlights</div>
@@ -1171,12 +1396,32 @@ const DetailPage = ({
           ) : null;
         })()}
 
+        {/* ══ MEASUREMENTS & SPECIFICATIONS ══ */}
+        {product.measurements && (
+          <div className="pdp-info-section">
+            <div className="pdp-section-heading">📏 Measurements & Specs</div>
+            <div 
+              style={{
+                background: "#f8fafc",
+                padding: "20px",
+                borderRadius: "14px",
+                fontSize: "14px",
+                lineHeight: "1.7",
+                color: "#334155",
+                whiteSpace: "pre-wrap"
+              }}
+            >
+              {product.measurements}
+            </div>
+          </div>
+        )}
+
         {/* ══ ABOUT THIS ITEM ══ */}
         {Array.isArray(product.highlights) && product.highlights.length > 0 && (
           <div className="pdp-info-section">
             <div className="pdp-section-heading">📋 About This Item</div>
             <ul className="pdp-about-list">
-              {product.highlights.map((h, i) => (
+              {(product.highlights || []).map((h, i) => (
                 <li key={i} className="pdp-about-item">
                   <span className="pdp-about-dot" />
                   {h}
@@ -1189,13 +1434,13 @@ const DetailPage = ({
         {/* ══ PRODUCT DETAILS ══ */}
         {(() => {
           const dtRows = [
-            ['Material', product.material],
-            ['Care Instructions', product.care],
-            ['Metal Type', product.metalType],
-            ['Metal Stamp', product.metalStamp],
-            ['Country of Origin', product.country],
-            ['Manufacturer', product.manufacturer || product.brand],
-            ['Collection Name', product.collection],
+            ["Material", product.material],
+            ["Care Instructions", product.care],
+            ["Metal Type", product.metalType],
+            ["Metal Stamp", product.metalStamp],
+            ["Country of Origin", product.country],
+            ["Manufacturer", product.manufacturer || product.brand],
+            ["Collection Name", product.collection],
           ].filter(([, v]) => v);
           return dtRows.length > 0 ? (
             <div className="pdp-info-section">
@@ -1203,7 +1448,10 @@ const DetailPage = ({
               <table className="pdp-dtable">
                 <tbody>
                   {dtRows.map(([k, v]) => (
-                    <tr key={k}><td>{k}</td><td>{v}</td></tr>
+                    <tr key={k}>
+                      <td>{k}</td>
+                      <td>{v}</td>
+                    </tr>
                   ))}
                 </tbody>
               </table>
@@ -1214,13 +1462,13 @@ const DetailPage = ({
         {/* ══ STYLE DETAILS ══ */}
         {(() => {
           const sItems = [
-            ['Colour', (product.colorNames || [])[selColor]],
-            ['Occasion', product.occasion],
-            ['Style Name', product.styleName],
-            ['Item Shape', product.itemShape],
-            ['Stone Color', product.stoneColor],
-            ['Stone Shape', product.stoneShape],
-            ['Charm Design', product.charmDesign],
+            ["Colour", (product.colorNames || [])[selColor]],
+            ["Occasion", product.occasion],
+            ["Style Name", product.styleName],
+            ["Item Shape", product.itemShape],
+            ["Stone Color", product.stoneColor],
+            ["Stone Shape", product.stoneShape],
+            ["Charm Design", product.charmDesign],
           ].filter(([, v]) => v);
           return sItems.length > 0 ? (
             <div className="pdp-info-section">
@@ -1239,8 +1487,16 @@ const DetailPage = ({
 
         {/* ══ MEASUREMENTS ══ */}
         {(() => {
-          const hasDim = product.length || product.breadth || product.height || product.dimensions;
-          const dimText = product.dimensions || (hasDim ? `${product.length || 0}L x ${product.breadth || 0}W x ${product.height || 0}H cm` : null);
+          const hasDim =
+            product.length ||
+            product.breadth ||
+            product.height ||
+            product.dimensions;
+          const dimText =
+            product.dimensions ||
+            (hasDim
+              ? `${product.length || 0}L x ${product.breadth || 0}W x ${product.height || 0}H cm`
+              : null);
           const hasWeight = product.weight;
           const weightText = hasWeight ? `${product.weight} kg` : null;
 
@@ -1293,7 +1549,88 @@ const DetailPage = ({
         </div>
 
         <hr className="pdp-rdiv" />
-        {product.reviewsList.map((r) => (
+
+        {/* ADD REVIEW FORM */}
+        <div className="pdp-review-form-wrap">
+          <div
+            className="pdp-rtitle"
+            style={{
+              fontSize: 13,
+              marginBottom: 10,
+              fontWeight: 600,
+              color: "var(--gold, #B5975A)",
+            }}
+          >
+            Write a Review
+          </div>
+          <form onSubmit={handleReviewSubmit} className="pdp-review-form">
+            <div className="pdp-rf-row">
+              <label className="pdp-rf-label">Your Rating</label>
+              <div className="pdp-rf-stars">
+                {[1, 2, 3, 4, 5].map((n) => (
+                  <FaStar
+                    key={n}
+                    size={18}
+                    style={{
+                      cursor: "pointer",
+                      color: n <= reviewForm.rating ? "#B5975A" : "#ccc",
+                      marginRight: 3,
+                    }}
+                    onClick={() => setReviewForm((f) => ({ ...f, rating: n }))}
+                  />
+                ))}
+              </div>
+            </div>
+            <div className="pdp-rf-row">
+              <label className="pdp-rf-label">
+                Title{" "}
+                <span style={{ color: "#aaa", fontWeight: 400 }}>
+                  (optional)
+                </span>
+              </label>
+              <input
+                className="pdp-rf-input"
+                type="text"
+                maxLength={120}
+                placeholder="Summarize your experience"
+                value={reviewForm.title}
+                onChange={(e) =>
+                  setReviewForm((f) => ({ ...f, title: e.target.value }))
+                }
+              />
+            </div>
+            <div className="pdp-rf-row">
+              <label className="pdp-rf-label">
+                Comment <span style={{ color: "#c00" }}>*</span>
+              </label>
+              <textarea
+                className="pdp-rf-textarea"
+                rows={3}
+                maxLength={1000}
+                placeholder="Share your experience with this product..."
+                value={reviewForm.body}
+                onChange={(e) =>
+                  setReviewForm((f) => ({ ...f, body: e.target.value }))
+                }
+              />
+            </div>
+            {reviewMsg.text && (
+              <div className={`pdp-rf-msg ${reviewMsg.type}`}>
+                {reviewMsg.text}
+              </div>
+            )}
+            <button
+              type="submit"
+              className="pdp-rf-submit"
+              disabled={reviewSubmitting}
+            >
+              {reviewSubmitting ? "Submitting..." : "Submit Review"}
+            </button>
+          </form>
+        </div>
+        <hr className="pdp-rdiv" />
+
+        {(product.reviewsList || []).map((r) => (
           <div className="pdp-rcard" key={r.id}>
             <div className="pdp-rhead">
               <div>
@@ -1430,7 +1767,7 @@ const DetailPage = ({
                       <div className="pdp-ppr">
                         <span className="pdp-pp">{rv.price}</span>
                         <span className="pdp-po">{rv.originalPrice}</span>
-                        <span className="pdp-pd">{rv.discount}</span>
+                        <span className="pdp-pd">{rv.discount || rv.offers}</span>
                       </div>
                     </div>
                   </div>
@@ -1448,18 +1785,59 @@ const DetailPage = ({
 export default function ProductListing() {
   const [activeColor, setActiveColor] = useState({});
   const [addedItems, setAddedItems] = useState({});
-  const [toast, setToast] = useState(null);
   const [detailProduct, setDetailProduct] = useState(null);
   const [detailVisible, setDetailVisible] = useState(false);
   const [detailAnim, setDetailAnim] = useState("entering");
   const [recentlyViewed, setRecentlyViewed] = useState([]);
 
   const { addToCart, toggleWishlist, isInWishlist } = useStore();
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const showToast = useCallback((msg) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2200);
+  // Direct fetch from API as requested
+  const fetchLocalProducts = useCallback(async () => {
+    try {
+      const response = await fetch("http://localhost:5000/api/products");
+      if (response.ok) {
+        const data = await response.json();
+        console.log("API Response (ProductListing):", data);
+        setProducts(data);
+      }
+    } catch (err) {
+      console.error("Local fetch error in ProductListing:", err);
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchLocalProducts();
+  }, [fetchLocalProducts]);
+
+  const allProducts = React.useMemo(() => {
+    // Combine fetched products with static ones, prioritizing backend data
+    const normalizedFetched = products.map(p => ({
+      ...p,
+      image: p.image?.startsWith("/") ? `http://localhost:5000${p.image}` : (p.image || ""),
+      images: Array.isArray(p.images) ? p.images : (p.image_url ? p.image_url.split(",").map(i => i.trim().startsWith("/") ? `http://localhost:5000${i.trim()}` : i.trim()) : [p.image?.startsWith("/") ? `http://localhost:5000${p.image}` : (p.image || "")]),
+      price: typeof p.price === 'number' ? `₹${p.price.toLocaleString("en-IN")}` : p.price,
+      originalPrice: typeof p.mrp === 'number' ? `₹${p.mrp.toLocaleString("en-IN")}` : (p.originalPrice || `₹${p.price}`),
+      rating: p.rating || 4.5,
+      reviews: p.reviews || 0,
+      tag: p.tag || "NEW IN",
+      discount: p.offers || p.offer || p.discount || "",
+      offer: p.offers || p.offer || p.discount || "",
+      colors: Array.isArray(p.colors) ? p.colors : (p.available_colors ? p.available_colors.split(",").map(c => c.trim()) : []),
+      sizes: Array.isArray(p.sizes) ? p.sizes : (p.available_sizes ? p.available_sizes.split(",").map(s => s.trim()) : []),
+      colorNames: Array.isArray(p.colorNames) ? p.colorNames : (p.available_colors ? p.available_colors.split(",").map(c => c.trim()) : []),
+      category: normalizeCategoryForShop(p.category),
+      sellerAdded: true
+    }));
+    console.log("Products State (ProductListing):", normalizedFetched);
+    return [...normalizedFetched, ...staticProducts];
+  }, [products]);
+
+
 
   const openDetail = useCallback((product) => {
     const scrollY = window.scrollY;
@@ -1494,33 +1872,29 @@ export default function ProductListing() {
         originalPrice: parsePrice(item.originalPrice),
         priceDisplay: item.price,
         discount: item.discount,
-        image: item.images[0],
-        category: item.category,
-        colors: item.colors,
-        rating: item.rating,
-        reviews: item.reviews,
-        tag: item.tag,
+        image: (item.images && item.images[0]) || item.image || "",
+        category: item.category || "General",
+        colors: item.colors || [],
+        rating: item.rating || 4.5,
+        reviews: item.reviews || 0,
+        tag: item.tag || "NEW IN",
         quantity,
       });
       setAddedItems((prev) => ({ ...prev, [item.id]: true }));
-      showToast(`${item.name} added to cart! ✓`);
       setTimeout(
         () => setAddedItems((prev) => ({ ...prev, [item.id]: false })),
         1600,
       );
     },
-    [addToCart, showToast],
+    [addToCart],
   );
 
   const handleWishlist = useCallback(
     (id, e) => {
       if (e) e.stopPropagation();
       toggleWishlist(id);
-      showToast(
-        isInWishlist(id) ? "Removed from wishlist" : "Added to wishlist ♥",
-      );
     },
-    [toggleWishlist, isInWishlist, showToast],
+    [toggleWishlist, isInWishlist],
   );
 
   const handleProductClick = useCallback((p) => {
@@ -1546,7 +1920,7 @@ export default function ProductListing() {
   return (
     <>
       <style>{css}</style>
-      {toast && <div className="toast-notif">{toast}</div>}
+
 
       {detailVisible && detailProduct && (
         <DetailPage
@@ -1558,6 +1932,7 @@ export default function ProductListing() {
           isInWishlist={isInWishlist}
           onProductClick={handleProductClick}
           recentlyViewed={recentlyViewed}
+          allProducts={allProducts}
         />
       )}
 
@@ -1578,7 +1953,7 @@ export default function ProductListing() {
           </Row>
           <div className="pl-divider" />
           <Row className="g-4">
-            {products.map((item, idx) => {
+            {allProducts.slice(0, 24).map((item, idx) => {
               const ts = tagStyles[item.tag] || {
                 bg: "#B5975A",
                 color: "#0F0F0F",
@@ -1594,20 +1969,23 @@ export default function ProductListing() {
                   >
                     <div className="pl-img-wrap">
                       <img
-                        src={item.images[0]}
+                        src={(item.images && item.images[0]) || item.image}
                         alt={item.name}
                         className="pl-img"
                         loading="lazy"
+                        onError={(e) => {
+                          e.target.src = "https://images.unsplash.com/photo-1441986300917-64674bd600d8?w=700&q=85&auto=format&fit=crop";
+                        }}
                       />
                       <span
                         className="pl-tag"
                         style={{ background: ts.bg, color: ts.color }}
                       >
-                        {item.tag}
+                        {item.tag || "NEW IN"}
                       </span>
                       <button
                         className="pl-wishlist"
-                        onClick={(e) => handleWishlist(item.id, e)}
+                        onClick={(e) => handleWishlist(item.id || item.PRDT_ID, e)}
                       >
                         {isWishlisted ? (
                           <FaHeart className="heart-active" size={12} />
@@ -1623,7 +2001,7 @@ export default function ProductListing() {
                       <div className="pl-cat">{item.category}</div>
                       <h3 className="pl-name">{item.name}</h3>
                       <div className="pl-colors">
-                        {item.colors.map((c, i) => (
+                        {(item.colors || []).map((c, i) => (
                           <div
                             key={i}
                             className="pl-dot"
@@ -1652,7 +2030,9 @@ export default function ProductListing() {
                       <div className="pl-prices">
                         <span className="pl-price">{item.price}</span>
                         <span className="pl-orig">{item.originalPrice}</span>
-                        <span className="pl-disc">{item.discount}</span>
+                        {(item.discount || item.offer || item.offers) && (item.discount !== "0" && item.offer !== "0" && item.offers !== "0") && (
+                          <span className="pl-disc">{item.offer || item.discount || item.offers}</span>
+                        )}
                       </div>
                       <button
                         className={`pl-cart ${isAdded ? "added" : ""}`}
@@ -1672,7 +2052,7 @@ export default function ProductListing() {
           </Row>
           <div className="pl-bottom">
             <p className="pl-bottom-line">
-              Showing {products.length} of 48 styles — there's more waiting for
+              Showing {allProducts.slice(0, 8).length} of {allProducts.length} styles — there's more waiting for
               you
             </p>
             <button className="pl-shop-btn">

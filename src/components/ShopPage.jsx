@@ -25,9 +25,10 @@ import {
   FaPlus,
   FaBolt,
   FaClock,
+  FaInfoCircle,
 } from "react-icons/fa";
 import { useStore } from "../context/StoreContext";
-import { useProducts } from "../context/ProductContext";
+import { useProducts, normalizeCategoryForShop, normalizeSubCategoryForShop } from "../context/ProductContext";
 
 const ageLimits = {
   Men: [
@@ -99,6 +100,7 @@ const staticProducts = [
     colors: ["#FFFFFF", "#4A6FA5", "#2E8B57"],
     colorNames: ["White", "Blue", "Green"],
     sizes: ["S", "M", "L", "XL", "XXL"],
+    sizeStock: { S: 15, M: 22, L: 18, XL: 9, XXL: 4 },
     description:
       "Classic Oxford weave, button-down collar, slim fit. A timeless staple crafted for the modern professional.",
     material: "100% Cotton Oxford Weave",
@@ -153,6 +155,7 @@ const staticProducts = [
     colors: ["#E8D4B8", "#A5B4CB", "#8B9A6E"],
     colorNames: ["Sand", "Sky", "Sage"],
     sizes: ["S", "M", "L", "XL"],
+    sizeStock: { S: 8, M: 14, L: 11, XL: 6 },
     description:
       "Breathable linen-cotton blend, perfect for summer. Relaxed fit keeps you cool all day long.",
     material: "55% Linen, 45% Cotton",
@@ -207,6 +210,7 @@ const staticProducts = [
     colors: ["#FFFFFF", "#F5F5F5"],
     colorNames: ["White", "Off-White"],
     sizes: ["S", "M", "L", "XL", "XXL"],
+    sizeStock: { S: 20, M: 35, L: 28, XL: 15, XXL: 8 },
     description:
       "Crisp cotton poplin, spread collar, regular fit. The ultimate formal shirt for every occasion.",
     material: "100% Cotton Poplin",
@@ -261,6 +265,7 @@ const staticProducts = [
     colors: ["#FFFFFF", "#1A3A5C", "#2E8B57"],
     colorNames: ["White", "Navy", "Forest"],
     sizes: ["S", "M", "L", "XL", "XXL"],
+    sizeStock: { S: 15, M: 22, L: 18, XL: 9, XXL: 4 },
     description:
       "Premium cotton pique, classic fit with ribbed collar. The polo that goes from casual to smart effortlessly.",
     material: "100% Combed Pique Cotton",
@@ -315,6 +320,7 @@ const staticProducts = [
     colors: ["#1C1C1C", "#4A6FA5", "#E64B2E"],
     colorNames: ["Black", "Blue", "Red"],
     sizes: ["S", "M", "L", "XL"],
+    sizeStock: { S: 5, M: 12, L: 8, XL: 3 },
     description:
       "Soft 100% cotton, relaxed fit, bold graphic print. Express yourself with this statement tee.",
     material: "100% Cotton",
@@ -369,6 +375,7 @@ const staticProducts = [
     colors: ["#FFFFFF", "#2C3E50", "#8B5A2B"],
     colorNames: ["White", "Navy", "Brown"],
     sizes: ["S", "M", "L", "XL", "XXL"],
+    sizeStock: { S: 25, M: 40, L: 30, XL: 18, XXL: 10 },
     description:
       "Ultra-soft cotton, slim v-neck, everyday essential. The tee you'll reach for every single day.",
     material: "100% Combed Cotton",
@@ -423,6 +430,7 @@ const staticProducts = [
     colors: ["#2E8B57", "#D4A96A", "#4A6FA5"],
     colorNames: ["Green", "Camel", "Blue"],
     sizes: ["S", "M", "L", "XL"],
+    sizeStock: { S: 4, M: 9, L: 7, XL: 3 },
     description:
       "Vibrant tropical print, camp collar, resort style. Make a statement wherever you go.",
     material: "100% Viscose",
@@ -477,6 +485,7 @@ const staticProducts = [
     colors: ["#1C1C1C", "#8B4513", "#2E8B57"],
     colorNames: ["Black", "Brown", "Green"],
     sizes: ["S", "M", "L", "XL"],
+    sizeStock: { S: 6, M: 10, L: 8, XL: 4 },
     description:
       "Bold floral print, open camp collar, relaxed fit. The statement piece your wardrobe needs.",
     material: "100% Rayon",
@@ -531,6 +540,7 @@ const staticProducts = [
     colors: ["#4A6FA5", "#E8D4B8", "#2C3E50"],
     colorNames: ["Blue", "Cream", "Navy"],
     sizes: ["S", "M", "L", "XL"],
+    sizeStock: { S: 3, M: 8, L: 6, XL: 2 },
     description:
       "Contemporary abstract print, modern slim fit. Art meets fashion in this unique piece.",
     material: "100% Viscose",
@@ -585,6 +595,7 @@ const staticProducts = [
     colors: ["#D4B8A4", "#2C3E50", "#4A5568"],
     colorNames: ["Khaki", "Navy", "Grey"],
     sizes: ["28", "30", "32", "34", "36", "38"],
+    sizeStock: { 28: 5, 30: 12, 32: 20, 34: 15, 36: 8, 38: 3 },
     description:
       "Stretch cotton twill, slim tapered fit. From boardroom to brunch without missing a beat.",
     material: "98% Cotton, 2% Elastane",
@@ -640,6 +651,7 @@ const staticProducts = [
     colors: ["#4A6FA5", "#2C3E50", "#1C1C2E"],
     colorNames: ["Light Blue", "Dark Blue", "Black"],
     sizes: ["28", "30", "32", "34", "36"],
+    sizeStock: { 28: 8, 30: 15, 32: 25, 34: 18, 36: 10 },
     description:
       "Premium denim, straight cut, timeless style. The jeans you'll wear for years.",
     material: "99% Cotton, 1% Elastane",
@@ -694,6 +706,7 @@ const staticProducts = [
     colors: ["#1C1C1C", "#2C3E50", "#6B4E3A"],
     colorNames: ["Black", "Navy", "Brown"],
     sizes: ["28", "30", "32", "34", "36"],
+    sizeStock: { 28: 4, 30: 10, 32: 14, 34: 9, 36: 5 },
     description:
       "Wool-blend formal trousers, tailored cut. Impeccable for boardroom and formal events.",
     material: "70% Wool, 30% Polyester",
@@ -747,6 +760,7 @@ const staticProducts = [
     colors: ["#D4AF37", "#8B0000", "#2C1810"],
     colorNames: ["Gold", "Crimson", "Dark Brown"],
     sizes: ["Free Size"],
+    sizeStock: { "Free Size": 12 },
     description:
       "Pure Banarasi silk with intricate zari border. A timeless piece of Indian heritage.",
     material: "Pure Banarasi Silk with Zari",
@@ -800,6 +814,7 @@ const staticProducts = [
     colors: ["#E6D5B8", "#9B6B43", "#4A6FA5"],
     colorNames: ["Ivory", "Tan", "Blue"],
     sizes: ["Free Size"],
+    sizeStock: { "Free Size": 8 },
     description:
       "Lightweight chiffon, floral embroidery, elegant drape. Perfect for parties and events.",
     material: "100% Chiffon with Embroidery",
@@ -853,6 +868,7 @@ const staticProducts = [
     colors: ["#E8C97E", "#8B4513", "#2E8B57"],
     colorNames: ["Gold", "Brown", "Green"],
     sizes: ["Free Size"],
+    sizeStock: { "Free Size": 20 },
     description:
       "Pure handloom cotton, traditional weave, daily wear. Comfortable and beautiful for everyday use.",
     material: "100% Handloom Cotton",
@@ -906,6 +922,7 @@ const staticProducts = [
     colors: ["#B76E6E", "#D4AF37", "#4A6FA5"],
     colorNames: ["Rose", "Gold", "Blue"],
     sizes: ["Free Size"],
+    sizeStock: { "Free Size": 6 },
     description:
       "Authentic Kanjivaram silk with golden zari work. The crown jewel of South Indian silk sarees.",
     material: "Pure Kanjivaram Silk with Zari",
@@ -960,6 +977,7 @@ const staticProducts = [
     colors: ["#FFFFFF", "#E64B2E", "#1C1C1C"],
     colorNames: ["White", "Red", "Black"],
     sizes: ["XS", "S", "M", "L", "XL"],
+    sizeStock: { XS: 3, S: 8, M: 12, L: 7, XL: 4 },
     description:
       "Trendy off-shoulder ruffle top, elasticated neckline. The perfect party-ready top.",
     material: "100% Polyester Chiffon",
@@ -1014,6 +1032,7 @@ const staticProducts = [
     colors: ["#E6D5B8", "#4A6FA5", "#2E8B57"],
     colorNames: ["Cream", "Blue", "Green"],
     sizes: ["XS", "S", "M", "L", "XL"],
+    sizeStock: { XS: 4, S: 10, M: 15, L: 10, XL: 5 },
     description:
       "Coordinated crop top + flowy palazzo set. The complete outfit that does all the work for you.",
     material: "95% Polyester, 5% Spandex",
@@ -1068,6 +1087,7 @@ const staticProducts = [
     colors: ["#4A6FA5", "#2C3E50", "#1C1C2E"],
     colorNames: ["Light Wash", "Dark Wash", "Black"],
     sizes: ["XS", "S", "M", "L"],
+    sizeStock: { XS: 3, S: 7, M: 10, L: 6 },
     description:
       "Classic denim jacket paired with mini skirt. The coordinated denim set for effortless cool.",
     material: "100% Cotton Denim",
@@ -1122,6 +1142,7 @@ const staticProducts = [
     colors: ["#E6D5B8", "#D4AF37", "#8B4513"],
     colorNames: ["Ivory", "Gold", "Brown"],
     sizes: ["XS", "S", "M", "L", "XL"],
+    sizeStock: { XS: 5, S: 12, M: 18, L: 12, XL: 6 },
     description:
       "Elegant flowy maxi dress with floral print, perfect for summer. Grace in motion.",
     material: "100% Chiffon",
@@ -1176,6 +1197,7 @@ const staticProducts = [
     colors: ["#C0C0C0", "#E8C97E"],
     colorNames: ["Silver", "Gold"],
     sizes: ["Free Size"],
+    sizeStock: { "Free Size": 25 },
     description:
       "925 Sterling silver necklace with pendant. Elegant everyday jewellery that goes with everything.",
     material: "925 Sterling Silver",
@@ -1230,6 +1252,7 @@ const staticProducts = [
     colors: ["#D4AF37", "#C0C0C0"],
     colorNames: ["Gold", "Silver"],
     sizes: ["Free Size"],
+    sizeStock: { "Free Size": 30 },
     description:
       "Elegant gold plated earrings, lightweight design. The perfect finishing touch to any outfit.",
     material: "Gold Plated Brass",
@@ -1284,6 +1307,7 @@ const staticProducts = [
     colors: ["#8B4513", "#4A6FA5", "#E8C97E"],
     colorNames: ["Brown", "Blue", "Gold"],
     sizes: ["Free Size"],
+    sizeStock: { "Free Size": 18 },
     description:
       "Handcrafted beaded necklace set, adjustable size. Bohemian style meets everyday elegance.",
     material: "Semi-precious beads, alloy",
@@ -1333,6 +1357,7 @@ const staticProducts = [
     colors: ["#C0C0C0", "#D4AF37"],
     colorNames: ["Silver", "Gold"],
     sizes: ["Free Size"],
+    sizeStock: { "Free Size": 22 },
     description:
       "Stackable rings set, adjustable fit. Minimalist beauty for the modern woman.",
     material: "Sterling Silver / Gold Plated",
@@ -1387,6 +1412,7 @@ const staticProducts = [
     colors: ["#D4A96A", "#8B5A2B", "#1C1C1C"],
     colorNames: ["Tan", "Brown", "Black"],
     sizes: ["36", "37", "38", "39", "40", "41"],
+    sizeStock: { 36: 6, 37: 10, 38: 15, 39: 12, 40: 8, 41: 4 },
     description:
       "Genuine leather straps, cushioned footbed. Walk in comfort and style all day long.",
     material: "Genuine Leather Upper, Rubber Sole",
@@ -1441,6 +1467,7 @@ const staticProducts = [
     colors: ["#D4A96A", "#8B5A2B", "#C2A87A"],
     colorNames: ["Tan", "Brown", "Camel"],
     sizes: ["36", "37", "38", "39", "40", "41"],
+    sizeStock: { 36: 8, 37: 12, 38: 18, 39: 14, 40: 9, 41: 5 },
     description:
       "Comfortable flat sandals, slip-on style. Your easy everyday go-to.",
     material: "Synthetic Upper, EVA Sole",
@@ -1495,6 +1522,7 @@ const staticProducts = [
     colors: ["#1C1C1C", "#8B5A2B", "#FFFFFF"],
     colorNames: ["Black", "Brown", "White"],
     sizes: ["36", "37", "38", "39", "40"],
+    sizeStock: { 36: 5, 37: 8, 38: 12, 39: 9, 40: 6 },
     description:
       "Stable block heel, ankle strap, all-day comfort. Elevated style without the discomfort.",
     material: "Faux Leather, Block Heel",
@@ -1549,6 +1577,7 @@ const staticProducts = [
     colors: ["#8B5A2B", "#1C1C1C", "#D4A96A"],
     colorNames: ["Brown", "Black", "Tan"],
     sizes: ["36", "37", "38", "39", "40", "41"],
+    sizeStock: { 36: 4, 37: 7, 38: 10, 39: 8, 40: 5, 41: 3 },
     description:
       "Trendy gladiator style, multiple straps, flat sole. Channel your inner warrior goddess.",
     material: "Genuine Leather Straps, Rubber Sole",
@@ -1603,6 +1632,7 @@ const staticProducts = [
     colors: ["#8B5A2B", "#2C1810", "#1C1C1C"],
     colorNames: ["Brown", "Dark Brown", "Black"],
     sizes: ["28", "30", "32", "34", "36", "38"],
+    sizeStock: { 28: 4, 30: 8, 32: 12, 34: 10, 36: 7, 38: 3 },
     description:
       "Genuine leather belt with polished buckle. The finishing touch that elevates every outfit.",
     material: "100% Genuine Leather",
@@ -1657,6 +1687,7 @@ const staticProducts = [
     colors: ["#C0C0C0", "#D4AF37", "#1C1C1C"],
     colorNames: ["Silver", "Gold", "Black"],
     sizes: ["Free Size"],
+    sizeStock: { "Free Size": 15 },
     description:
       "Elegant minimalist watch, stainless steel case. Time, kept beautifully.",
     material: "Stainless Steel Case, Leather Strap",
@@ -1711,6 +1742,7 @@ const staticProducts = [
     colors: ["#000000", "#8B4513", "#2C3E50"],
     colorNames: ["Black", "Brown", "Navy"],
     sizes: ["Free Size"],
+    sizeStock: { "Free Size": 20 },
     description:
       "Polarized UV protection, classic aviator style. See the world in style.",
     material: "Metal Frame, Polarized Lens",
@@ -1765,6 +1797,7 @@ const staticProducts = [
     colors: ["#8B5A2B", "#2C1810", "#4A2512"],
     colorNames: ["Tan", "Dark Brown", "Cognac"],
     sizes: ["Free Size"],
+    sizeStock: { "Free Size": 28 },
     description:
       "Premium leather wallet with multiple card slots. Slim, stylish and built to last.",
     material: "100% Genuine Leather",
@@ -1819,6 +1852,7 @@ const staticProducts = [
     colors: ["#8B5A2B", "#2C1810", "#1C1C1C"],
     colorNames: ["Tan", "Dark Brown", "Black"],
     sizes: ["Free Size"],
+    sizeStock: { "Free Size": 10 },
     description:
       "Handcrafted leather backpack, laptop compartment. Carry everything in timeless style.",
     material: "100% Full-Grain Leather",
@@ -2121,6 +2155,39 @@ const globalStyles = `
   .toast-notification { position:fixed; bottom:30px; right:30px; background:#0F0F0F; color:white; padding:14px 24px; border-radius:8px; font-family:'Inter',sans-serif; font-size:14px; font-weight:500; z-index:9998; animation:slideInRight 0.3s ease; box-shadow:0 8px 24px rgba(0,0,0,0.2); display:flex; align-items:center; gap:12px; border-left:4px solid #D4AF37; }
   @keyframes slideInRight { from{transform:translateX(100%);opacity:0} to{transform:translateX(0);opacity:1} }
   
+  /* Size Notification Toast */
+  .size-notification{
+    position:fixed; bottom:30px; left:50%; transform:translateX(-50%);
+    background:var(--dark,#0F0F0F); color:var(--gold,#D4AF37); padding:12px 24px;
+    border-radius:40px; font-size:13px; font-weight:500;
+    z-index:10000; animation:slideUpFade 2.5s ease forwards;
+    box-shadow:0 4px 15px rgba(0,0,0,0.2); display:flex; align-items:center;
+    gap:10px; font-family:'Inter',sans-serif; white-space:nowrap;
+  }
+  .size-notification.out-of-stock{background:#c0392b;color:#fff}
+  .size-notification.low-stock{background:#e67e22;color:#fff}
+  .size-notification.available{background:#27ae60;color:#fff}
+  @keyframes slideUpFade{
+    0%{opacity:0;transform:translateX(-50%) translateY(20px)}
+    15%{opacity:1;transform:translateX(-50%) translateY(0)}
+    85%{opacity:1;transform:translateX(-50%) translateY(0)}
+    100%{opacity:0;transform:translateX(-50%) translateY(-10px)}
+  }
+  
+  /* Out of stock size button style */
+  .pdp-sbtn.out-of-stock{
+    opacity:0.5;
+    background:#f5f5f5;
+    border-color:#ddd;
+    cursor:not-allowed;
+    text-decoration:line-through;
+    position:relative;
+  }
+  .pdp-sbtn.out-of-stock:hover{
+    border-color:#ddd;
+    transform:none;
+  }
+  
   /* Responsive adjustments */
   @media (max-width:768px) {
     .filter-inner { flex-direction:column; align-items:stretch; gap:12px; }
@@ -2131,6 +2198,7 @@ const globalStyles = `
     .sec-head h2 { font-size:24px; }
     .age-filter-inner { gap:8px; }
     .toast-notification { bottom:20px; right:20px; left:20px; padding:12px 20px; }
+    .size-notification { bottom:20px; left:20px; right:20px; transform:translateX(0); white-space:normal; text-align:center; }
   }
 
   /* ══════════════════ DETAIL OVERLAY ══════════════════ */
@@ -2285,7 +2353,7 @@ const globalStyles = `
   .pdp-ppr    { display:flex; align-items:baseline; gap:4px; justify-content:flex-start; }
   .pdp-pp     { font-family:'Playfair Display',serif; font-size:13px; font-weight:700; color:var(--dark); }
   .pdp-po     { font-size:10px; color:#bbb; text-decoration:line-through; }
-  .pdp-pd     { font-size:9px; color:var(--success); font-weight:600; }
+  .pdp-pd     { font-size:9px; color:#000; font-weight:700; }
 
   /* ── Enhanced Info Sections ── */
   .pdp-info-section{margin-bottom:26px}
@@ -2311,16 +2379,19 @@ const globalStyles = `
   .pdp-measure-item{background:var(--light);border:1px solid var(--border);border-radius:9px;padding:13px 17px;flex:1;min-width:130px}
   .pdp-measure-label{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;color:var(--mid);font-weight:600;margin-bottom:3px}
   .pdp-measure-value{font-size:14px;font-weight:700;color:var(--dark)}
-  .pdp-offer-band{background:linear-gradient(135deg,#f0fff4,#e8f5e9);border:1px solid #c8e6c9;border-radius:9px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
-  .pdp-offer-pill{background:#27AE60;color:#fff;font-size:10px;font-weight:700;letter-spacing:.6px;padding:3px 9px;border-radius:20px;white-space:nowrap}
-  .pdp-offer-text{font-size:12px;color:#1B5E20;font-weight:500}
+  .pdp-offer-band{background:linear-gradient(135deg,#f9f9f9,#f1f1f1);border:1px solid var(--border);border-radius:9px;padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .pdp-offer-pill{background:#000;color:#fff;font-size:10px;font-weight:700;letter-spacing:.6px;padding:3px 9px;border-radius:20px;white-space:nowrap}
+  .pdp-offer-text{font-size:12px;color:#000;font-weight:500}
   @media(max-width:576px){.pdp-hl-grid{grid-template-columns:repeat(2,1fr)}.pdp-style-grid{grid-template-columns:1fr}}
 `;
 
 /* ══════════════════════════════════════════════════════════════════════════════
-   DETAIL PAGE COMPONENT WITH WORKING SIZE SELECTION
+   DETAIL PAGE COMPONENT WITH SIZE STOCK NOTIFICATION
 ══════════════════════════════════════════════════════════════════════════════ */
-const parsePrice = (s) => parseFloat(String(s).replace(/[₹,]/g, ""));
+const parsePrice = (s) => {
+  if (!s || typeof s !== 'string') return parseFloat(String(s || 0)) || 0;
+  return parseFloat(s.replace(/[₹,]/g, "")) || 0;
+};
 
 const DetailPage = ({
   product,
@@ -2339,6 +2410,27 @@ const DetailPage = ({
   const [selSize, setSelSize] = useState(null);
   const [qty, setQty] = useState(1);
   const [cartAdded, setCartAdded] = useState(false);
+  const [sizeNotification, setSizeNotification] = useState(null);
+
+  // Manual Normalization Fallbacks
+  if (product) {
+    if (!product.images) product.images = [product.image];
+    if (!product.originalPrice) product.originalPrice = product.mrp || product.price;
+    if (!product.colors || product.colors.length === 0) {
+      if (product.available_colors) {
+        product.colors = product.available_colors.split(",").map((c) => c.trim());
+      } else {
+        product.colors = ["Standard"];
+      }
+    }
+    if (!product.sizes || product.sizes.length === 0) {
+      if (product.available_sizes) {
+          product.sizes = product.available_sizes.split(",").map((s) => s.trim());
+      } else {
+          product.sizes = ["S", "M", "L", "XL"];
+      }
+    }
+  }
 
   // ── Dynamic Reviews ──
   const { user } = useAuth();
@@ -2351,6 +2443,50 @@ const DetailPage = ({
   });
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewMsg, setReviewMsg] = useState({ text: "", type: "" });
+
+  // Helper function to get stock for a size
+  const getStockForSize = (size) => {
+    if (!product.sizeStock) return null;
+    return product.sizeStock[size] !== undefined
+      ? product.sizeStock[size]
+      : null;
+  };
+
+  // Handle size click with stock notification
+  const handleSizeClick = (size) => {
+    const stock = getStockForSize(size);
+
+    if (stock === 0) {
+      setSizeNotification({
+        message: `❌ Size ${size} is out of stock!`,
+        type: "out-of-stock",
+      });
+      setTimeout(() => setSizeNotification(null), 2500);
+      return;
+    }
+
+    if (stock !== null && stock > 0 && stock <= 3) {
+      setSizeNotification({
+        message: `⚠️ Only ${stock} left in size ${size}! Hurry up!`,
+        type: "low-stock",
+      });
+      setTimeout(() => setSizeNotification(null), 2500);
+    } else if (stock !== null && stock > 0) {
+      setSizeNotification({
+        message: `✅ Size ${size} is available (${stock} in stock)`,
+        type: "available",
+      });
+      setTimeout(() => setSizeNotification(null), 2000);
+    } else {
+      setSizeNotification({
+        message: `📏 Size ${size} selected`,
+        type: "available",
+      });
+      setTimeout(() => setSizeNotification(null), 1500);
+    }
+
+    setSelSize(size);
+  };
 
   const fetchReviews = useCallback(async (pid) => {
     if (!pid) return;
@@ -2467,15 +2603,31 @@ const DetailPage = ({
     { l: "1★", p: 2, c: Math.round((product.reviews || 0) * 0.02) },
   ];
 
-  // Updated handleCart to include selected size
+  // Updated handleCart to check stock before adding
   const handleCart = () => {
+    if (selSize && getStockForSize(selSize) === 0) {
+      setSizeNotification({
+        message: `❌ Cannot add: ${selSize} is out of stock!`,
+        type: "out-of-stock",
+      });
+      setTimeout(() => setSizeNotification(null), 2000);
+      return;
+    }
     onAddToCart({ ...product, selectedSize: selSize }, qty);
     setCartAdded(true);
     setTimeout(() => setCartAdded(false), 1600);
   };
 
-  // Updated handleBuyNow to include selected size
+  // Updated handleBuyNow to check stock before buying
   const handleBuyNow = () => {
+    if (selSize && getStockForSize(selSize) === 0) {
+      setSizeNotification({
+        message: `❌ Cannot buy: ${selSize} is out of stock!`,
+        type: "out-of-stock",
+      });
+      setTimeout(() => setSizeNotification(null), 2000);
+      return;
+    }
     onAddToCart({ ...product, selectedSize: selSize }, qty);
     navigate("/checkout");
   };
@@ -2541,13 +2693,44 @@ const DetailPage = ({
   }, [mainImg, images]);
 
   const curImg = images[mainImg];
-  const colorNames =
-    product.colorNames ||
-    (product.colors || []).map((_, i) => `Color ${i + 1}`);
-  const sizes = product.sizes || ["S", "M", "L", "XL"];
+  
+  // Normalize color names
+  let normalizedColorNames = product.colorNames;
+  if (!normalizedColorNames || normalizedColorNames.length === 0) {
+    if (product.available_colors) {
+      normalizedColorNames = product.available_colors.split(",").map(c => c.trim());
+    } else if (product.colors) {
+      normalizedColorNames = product.colors.map((_, i) => `Color ${i + 1}`);
+    } else {
+      normalizedColorNames = [];
+    }
+  }
+
+  // Normalize sizes
+  let normalizedSizes = product.sizes;
+  if (!normalizedSizes || normalizedSizes.length === 0) {
+    if (product.available_sizes) {
+      normalizedSizes = product.available_sizes.split(",").map(s => s.trim());
+    } else {
+      normalizedSizes = ["S", "M", "L", "XL"];
+    }
+  }
+
+  const colorNames = normalizedColorNames;
+  const sizes = normalizedSizes;
+
+  // Normalize product discount if offer/offers exists
+  const discount = product.offer || product.offers || product.discount;
 
   return (
     <div className={`pdp-overlay ${detailAnim}`} ref={overlayRef}>
+      {/* Size Notification Toast */}
+      {sizeNotification && (
+        <div className={`size-notification ${sizeNotification.type}`}>
+          <FaInfoCircle size={14} /> {sizeNotification.message}
+        </div>
+      )}
+
       <div className="pdp-nav">
         <button className="pdp-back-btn" onClick={onClose}>
           <FaArrowLeft size={10} /> Back to Shop
@@ -2643,16 +2826,42 @@ const DetailPage = ({
           <div className="pdp-prices">
             <span className="pdp-price">{product.price}</span>
             <span className="pdp-oprice">{product.originalPrice}</span>
-            <span className="pdp-dbadge">{product.discount}</span>
+            {discount && discount !== "0" && <span className="pdp-dbadge">{discount}</span>}
           </div>
           <p className="pdp-save">You save ₹{saving.toLocaleString("en-IN")}</p>
-          {product.discount && saving > 0 && (
+          {(discount) && saving > 0 && (
             <div className="pdp-offer-band">
-              <span className="pdp-offer-pill">{product.discount}</span>
+              <span className="pdp-offer-pill">{discount}</span>
               <span className="pdp-offer-text">
                 Limited time offer — save ₹{saving.toLocaleString("en-IN")} on
                 this item
               </span>
+            </div>
+          )}
+
+          {/* Coupon Info */}
+          {product.coupon_details && (
+            <div 
+              style={{
+                background: "#f0fdf4",
+                border: "1px dashed #22c55e",
+                borderRadius: 10,
+                padding: "10px 14px",
+                margin: "14px 0",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center"
+              }}
+            >
+              <div>
+                <div style={{ fontSize: 10, color: "#16a34a", fontWeight: 700, textTransform: "uppercase" }}>Coupon Available</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "#14532d" }}>
+                  {typeof product.coupon_details === 'string' ? product.coupon_details : "Apply coupon at checkout"}
+                </div>
+              </div>
+              <div style={{ background: "#dcfce7", color: "#15803d", padding: "4px 10px", borderRadius: 6, fontWeight: 800, fontSize: 12 }}>
+                ADD
+              </div>
             </div>
           )}
           <div className="pdp-stock">
@@ -2676,6 +2885,8 @@ const DetailPage = ({
                         product.colorImages[i] !== undefined
                       ) {
                         setMainImg(product.colorImages[i]);
+                      } else if (product.images && product.images[i] !== undefined) {
+                        setMainImg(i);
                       }
                     }}
                   >
@@ -2687,18 +2898,22 @@ const DetailPage = ({
             </>
           )}
 
-          {/* SIZE SELECTION - Click to select, active style shows dark background */}
+          {/* SIZE SELECTION - With stock notification on click */}
           <div className="pdp-lbl">Choose Size</div>
           <div className="pdp-slist">
-            {sizes.map((s) => (
-              <button
-                key={s}
-                className={`pdp-sbtn ${selSize === s ? "active" : ""}`}
-                onClick={() => setSelSize(s)}
-              >
-                {s}
-              </button>
-            ))}
+            {sizes.map((s) => {
+              const stock = getStockForSize(s);
+              const isOutOfStock = stock === 0;
+              return (
+                <button
+                  key={s}
+                  className={`pdp-sbtn ${selSize === s ? "active" : ""} ${isOutOfStock ? "out-of-stock" : ""}`}
+                  onClick={() => handleSizeClick(s)}
+                >
+                  {s} {isOutOfStock && "(Out of Stock)"}
+                </button>
+              );
+            })}
           </div>
 
           <div className="pdp-lbl">Quantity</div>
@@ -2857,11 +3072,27 @@ const DetailPage = ({
           const hasWeight = product.weight;
           const weightText = hasWeight ? `${product.weight} kg` : null;
 
-          if (!dimText && !weightText) return null;
+          if (!dimText && !weightText && !product.measurements) return null;
 
           return (
             <div className="pdp-info-section">
-              <div className="pdp-section-heading">📐 Measurements</div>
+              <div className="pdp-section-heading">📏 Measurements & Specs</div>
+              {product.measurements && (
+                <div 
+                  style={{
+                    background: "#f8faf9",
+                    padding: "18px",
+                    borderRadius: "12px",
+                    fontSize: "14px",
+                    lineHeight: "1.7",
+                    color: "#444",
+                    whiteSpace: "pre-wrap",
+                    marginBottom: (dimText || weightText) ? "15px" : "0"
+                  }}
+                >
+                  {product.measurements}
+                </div>
+              )}
               <div className="pdp-measure-row">
                 {dimText && (
                   <div className="pdp-measure-item">
@@ -3091,7 +3322,9 @@ const DetailPage = ({
                       <div className="pdp-ppr">
                         <span className="pdp-pp">{sp.price}</span>
                         <span className="pdp-po">{sp.originalPrice}</span>
-                        <span className="pdp-pd">{sp.discount}</span>
+                        {(sp.offer || sp.discount || sp.offers) && (sp.offer !== "0" && sp.discount !== "0" && sp.offers !== "0") && (
+                          <span className="pdp-pd">{sp.offer || sp.discount || sp.offers}</span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -3157,7 +3390,9 @@ const DetailPage = ({
                       <div className="pdp-ppr">
                         <span className="pdp-pp">{rv.price}</span>
                         <span className="pdp-po">{rv.originalPrice}</span>
-                        <span className="pdp-pd">{rv.discount}</span>
+                        {(rv.offer || rv.discount || rv.offers) && (rv.offer !== "0" && rv.discount !== "0" && rv.offers !== "0") && (
+                          <span className="pdp-pd">{rv.offer || rv.discount || rv.offers}</span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -3233,7 +3468,6 @@ export default function ShopPage() {
   const [sortBy, setSortBy] = useState("featured");
   const [visibleProducts, setVisibleProducts] = useState(8);
   const [activeAge, setActiveAge] = useState("all");
-  const [toast, setToast] = useState({ show: false, message: "" });
 
   const [detailProduct, setDetailProduct] = useState(null);
   const [detailVisible, setDetailVisible] = useState(false);
@@ -3246,17 +3480,54 @@ export default function ShopPage() {
     removeFromWishlist,
     isInWishlist,
   } = useStore();
-  const { products: sellerProducts, deleteProduct } = useProducts();
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  const allProducts = React.useMemo(
-    () => [...sellerProducts, ...staticProducts],
-    [sellerProducts],
-  );
+  // Direct fetch from API as requested
+  const fetchLocalProducts = useCallback(async () => {
+    try {
+      const response = await fetch("http://localhost:5000/api/products");
+      if (response.ok) {
+        const data = await response.json();
+        console.log("API Response (ShopPage):", data);
+        setProducts(data);
+      }
+    } catch (err) {
+      console.error("Local fetch error in ShopPage:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
-  const showToast = (productName) => {
-    setToast({ show: true, message: `${productName} added to cart!` });
-    setTimeout(() => setToast({ show: false, message: "" }), 2000);
-  };
+  useEffect(() => {
+    fetchLocalProducts();
+  }, [fetchLocalProducts]);
+
+  const allProducts = React.useMemo(() => {
+    // Combine fetched products with static ones, prioritizing backend data
+    const normalizedFetched = products.map(p => ({
+      ...p,
+      image: p.image?.startsWith("/") ? `http://localhost:5000${p.image}` : (p.image || ""),
+      images: Array.isArray(p.images) ? p.images : (p.image_url ? p.image_url.split(",").map(i => i.trim().startsWith("/") ? `http://localhost:5000${i.trim()}` : i.trim()) : [p.image?.startsWith("/") ? `http://localhost:5000${p.image}` : (p.image || "")]),
+      price: typeof p.price === 'number' ? `₹${p.price.toLocaleString("en-IN")}` : p.price,
+      originalPrice: typeof p.mrp === 'number' ? `₹${p.mrp.toLocaleString("en-IN")}` : (p.originalPrice || `₹${p.price}`),
+      rating: p.rating || 4.5,
+      reviews: p.reviews || 0,
+      tag: p.tag || "NEW IN",
+      discount: p.offers || p.offer || p.discount || "",
+      offer: p.offers || p.offer || p.discount || "",
+      colors: Array.isArray(p.colors) ? p.colors : (p.available_colors ? p.available_colors.split(",").map(c => c.trim()) : []),
+      sizes: Array.isArray(p.sizes) ? p.sizes : (p.available_sizes ? p.available_sizes.split(",").map(s => s.trim()) : []),
+      colorNames: Array.isArray(p.colorNames) ? p.colorNames : (p.available_colors ? p.available_colors.split(",").map(c => c.trim()) : []),
+      category: normalizeCategoryForShop(p.category),
+      subCategory: normalizeSubCategoryForShop(p.category, p.subcategory),
+      sellerAdded: true
+    }));
+    console.log("Products State (ShopPage):", normalizedFetched);
+    return [...normalizedFetched, ...staticProducts];
+  }, [products]);
+
+
 
   const toggleWishlist = (p) =>
     isInWishlist(p.id) ? removeFromWishlist(p.id) : addToStoreWishlist(p);
@@ -3292,7 +3563,6 @@ export default function ShopPage() {
         price: parseInt(String(item.price).replace(/[^0-9]/g, "")),
         quantity,
       });
-      showToast(item.name);
     },
     [addToCart],
   );
@@ -3328,10 +3598,12 @@ export default function ShopPage() {
 
   let filtered = allProducts.filter((p) => {
     if (activeCategory === "All") return true;
-    if (p.category !== activeCategory) return false;
-    if (activeSubCategory && p.subCategory !== activeSubCategory) return false;
+    const match = String(p.category || "").toLowerCase() === activeCategory.toLowerCase();
+    if (!match) return false;
+    if (activeSubCategory && String(p.subCategory || "").toLowerCase() !== activeSubCategory.toLowerCase()) return false;
     return true;
   });
+  console.log(`[ShopPage DEBUG] Total: ${allProducts.length} | Category: ${activeCategory} | Filtered: ${filtered.length}`);
 
   const currentAgeLimits = ageLimits[activeCategory];
   if (currentAgeLimits && activeAge !== "all") {
@@ -3556,7 +3828,9 @@ export default function ShopPage() {
                       <div className="pl-prices">
                         <span className="pl-price">{item.price}</span>
                         <span className="pl-orig">{item.originalPrice}</span>
-                        <span className="pl-disc">{item.discount}</span>
+                        {(item.discount || item.offer || item.offers) && (item.discount !== "0" && item.offer !== "0" && item.offers !== "0") && (
+                          <span className="pl-disc">{item.discount || item.offer || item.offers}</span>
+                        )}
                       </div>
                       <button
                         className="pl-cart"
@@ -3603,12 +3877,7 @@ export default function ShopPage() {
         </Container>
       </div>
 
-      {toast.show && (
-        <div className="toast-notification">
-          <FaCheckCircle size={18} />
-          {toast.message}
-        </div>
-      )}
+
     </div>
   );
 }

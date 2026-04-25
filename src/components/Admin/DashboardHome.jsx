@@ -5,7 +5,7 @@ import "./AdminDashboard.css";
 
 Chart.register(...registerables);
 
-const DashboardHome = () => {
+const DashboardHome = ({ stats }) => {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [animatedValues, setAnimatedValues] = useState({
     revenue: 0,
@@ -25,38 +25,9 @@ const DashboardHome = () => {
     return () => clearInterval(timer);
   }, []);
 
-  // Animated counters
-  useEffect(() => {
-    const duration = 1000;
-    const step = 20;
-    let r = 0,
-      s = 0,
-      c = 0,
-      rt = 0;
-
-    const interval = setInterval(() => {
-      r = Math.min(r + 23569 / (duration / step), 23569);
-      s = Math.min(s + 3435 / (duration / step), 3435);
-      c = Math.min(c + 1245 / (duration / step), 1245);
-      rt = Math.min(rt + 47 / (duration / step), 47);
-
-      setAnimatedValues({
-        revenue: r,
-        sales: Math.floor(s),
-        customers: Math.floor(c),
-        returnRate: rt.toFixed(1),
-      });
-
-      if (r >= 23569) clearInterval(interval);
-    }, step);
-
-    return () => clearInterval(interval);
-  }, []);
-
- 
+  // Pie Chart
   useEffect(() => {
     if (!pieRef.current) return;
-
     if (pieChartRef.current) pieChartRef.current.destroy();
 
     pieChartRef.current = new Chart(pieRef.current, {
@@ -88,133 +59,75 @@ const DashboardHome = () => {
 
   // Line Chart
   useEffect(() => {
-    if (!lineRef.current) return;
+    const fetchLineData = async () => {
+        if (!lineRef.current) return;
+        try {
+            const response = await fetch("http://localhost:5000/api/analytics/revenue?period=monthly");
+            if (response.ok) {
+                const data = await response.json();
+                const labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+                const revenueValues = new Array(12).fill(0);
+                
+                data.forEach(item => {
+                    revenueValues[item.label - 1] = parseFloat(item.value);
+                });
 
-    if (lineChartRef.current) lineChartRef.current.destroy();
+                if (lineChartRef.current) lineChartRef.current.destroy();
 
-    const months = [
-      "Jan",
-      "Feb",
-      "Mar",
-      "Apr",
-      "May",
-      "Jun",
-      "Jul",
-      "Aug",
-      "Sep",
-      "Oct",
-      "Nov",
-      "Dec",
-    ];
-    const monthlySales = [
-      12500, 15200, 16800, 18200, 21000, 23500, 25600, 27800, 29100, 30500,
-      31800, 33500,
-    ];
-    const monthlyRevenue = [
-      9800, 11200, 12800, 14500, 16800, 18500, 20200, 22500, 24100, 25800,
-      27200, 28900,
-    ];
+                lineChartRef.current = new Chart(lineRef.current, {
+                  type: "line",
+                  data: {
+                    labels: labels,
+                    datasets: [
+                      {
+                        label: "Revenue",
+                        data: revenueValues,
+                        borderColor: "#43e97b",
+                        backgroundColor: "rgba(67, 233, 123, 0.1)",
+                        fill: true,
+                        tension: 0.4,
+                        pointRadius: 3,
+                        borderWidth: 2,
+                      }
+                    ],
+                  },
+                  options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                      legend: { display: false },
+                    },
+                    scales: {
+                      x: {
+                        ticks: { font: { size: 11 }, maxRotation: 0 },
+                      },
+                      y: {
+                        ticks: {
+                          font: { size: 11 },
+                          callback: (v) => "" + (v >= 1000 ? (v / 1000).toFixed(0) + "k" : v),
+                        },
+                      },
+                    },
+                  },
+                });
+            }
+        } catch (err) {
+            console.error("Failed to fetch line chart data:", err);
+        }
+    };
 
-    lineChartRef.current = new Chart(lineRef.current, {
-      type: "line",
-      data: {
-        labels: months,
-        datasets: [
-          {
-            label: "Sales",
-            data: monthlySales,
-            borderColor: "#4facfe",
-            backgroundColor: "rgba(79,172,254,0.1)",
-            fill: true,
-            tension: 0.4,
-            pointRadius: 3,
-            borderWidth: 2,
-          },
-          {
-            label: "Revenue",
-            data: monthlyRevenue,
-            borderColor: "#43e97b",
-            backgroundColor: "rgba(238, 243, 240, 0.1)",
-            fill: true,
-            tension: 0.4,
-            pointRadius: 3,
-            borderWidth: 2,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-          legend: { display: false },
-        },
-        scales: {
-          x: {
-            ticks: { font: { size: 11 }, maxRotation: 0 },
-          },
-          y: {
-            ticks: {
-              font: { size: 11 },
-              callback: (v) => "" + (v / 1000).toFixed(0) + "k",
-            },
-          },
-        },
-      },
-    });
+    fetchLineData();
 
     return () => {
       if (lineChartRef.current) lineChartRef.current.destroy();
     };
   }, []);
 
-  const trafficSources = [
-    { name: "Direct", percentage: 45, color: "#4facfe" },
-    { name: "Social", percentage: 30, color: "#43e97b" },
-    { name: "Referral", percentage: 25, color: "#fa709a" },
-  ];
-
-  const topProducts = [
-    { name: "Premium Widget", sales: 245, revenue: 12250, status: "active" },
-    { name: "Standard Package", sales: 189, revenue: 9455, status: "active" },
-    { name: "Basic Module", sales: 156, revenue: 4680, status: "active" },
-    { name: "Pro Bundle", sales: 98, revenue: 10460, status: "active" },
-  ];
-
-  const recentActivities = [
-    {
-      id: 1,
-      title: "New order received",
-      description: "Order #12345 from John Doe",
-      time: "2 minutes ago",
-    },
-    {
-      id: 2,
-      title: "New customer registered",
-      description: "Jane Smith joined the platform",
-      time: "15 minutes ago",
-    },
-    {
-      id: 3,
-      title: "Low stock alert",
-      description: "Product SKU #789 is running low",
-      time: "1 hour ago",
-    },
-    {
-      id: 4,
-      title: "New review posted",
-      description: "5-star review for Premium Widget",
-      time: "3 hours ago",
-    },
-  ];
-
-  const monthlySales = [
-    12500, 15200, 16800, 18200, 21000, 23500, 25600, 27800, 29100, 30500, 31800,
-    33500,
-  ];
-  const monthlyRevenue = [
-    9800, 11200, 12800, 14500, 16800, 18500, 20200, 22500, 24100, 25800, 27200,
-    28900,
-  ];
+  const trafficSources = [];
+  const topProducts = [];
+  const recentActivities = [];
+  const monthlySales = [];
+  const monthlyRevenue = [];
 
   return (
     <>
@@ -244,27 +157,23 @@ const DashboardHome = () => {
         {[
           {
             label: "REVENUE",
-            value: `${Math.floor(animatedValues.revenue).toLocaleString()}`,
-            change: "↑ 12.5%",
+            value: `₹${stats.totalRevenue.toLocaleString()}`,
             positive: true,
           },
           {
             label: "SALES",
-            value: animatedValues.sales.toLocaleString(),
-            change: "↑ 8.2%",
+            value: stats.totalOrders.toLocaleString(),
             positive: true,
           },
           {
             label: "CUSTOMERS",
-            value: animatedValues.customers.toLocaleString(),
-            change: "↑ 5.0%",
+            value: stats.totalUsers.toLocaleString(),
             positive: true,
           },
           {
-            label: "RETURN RATE",
-            value: `${animatedValues.returnRate}%`,
-            change: "↓ 2.1%",
-            positive: false,
+            label: "PRODUCTS",
+            value: stats.totalProducts.toLocaleString(),
+            positive: true,
           },
         ].map((s, i) => (
           <div
@@ -280,11 +189,6 @@ const DashboardHome = () => {
                   {s.value}
                 </span>
               </div>
-              <p
-                className={`stat-change ${s.positive ? "positive" : "negative"}`}
-              >
-                {s.change}
-              </p>
             </div>
           </div>
         ))}

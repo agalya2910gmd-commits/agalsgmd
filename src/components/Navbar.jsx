@@ -1,18 +1,19 @@
 // components/Navbar.jsx
 import React, { useState, useRef, useEffect } from "react";
 import {
-  FaSearch,
   FaHeart,
   FaShoppingBag,
-  FaUser,
+  FaSearch,
+  FaUserCircle,
   FaChevronDown,
   FaSignOutAlt,
-  FaUserCircle,
   FaTachometerAlt,
+  FaBell,
 } from "react-icons/fa";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useStore } from "../context/StoreContext";
 import { useAuth } from "../context/AuthContext";
+import NotificationBell from "./NotificationBell";
 
 const globalCSS = `
   @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700;800&family=Inter:wght@300;400;500;600;700;800&display=swap');
@@ -272,7 +273,14 @@ export default function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
   const { getCartCount, wishlist } = useStore();
-  const { user, isAuthenticated, logout, isAdmin, profileImage } = useAuth();
+  const { 
+    user, 
+    isAuthenticated, 
+    logout, 
+    isAdmin, 
+    isSeller, 
+    profileImage 
+  } = useAuth();
   const [searchOpen, setSearchOpen] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const userMenuRef = useRef(null);
@@ -359,6 +367,8 @@ export default function Navbar() {
               <span className="badge">{getCartCount()}</span>
             )}
           </Link>
+
+          <NotificationBell user={user} isAdmin={isAdmin} isSeller={isSeller} />
 
           <div
             style={{
@@ -493,7 +503,7 @@ export default function Navbar() {
             </div>
           ) : (
             <Link to="/login" className="login-btn">
-              <FaUser size={13} />
+              <FaUserCircle size={15} />
               <span>Sign In</span>
             </Link>
           )}

@@ -117,6 +117,13 @@
   overflow: hidden;
 }
 
+.full-screen-content {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0 !important;
+  overflow: visible !important;
+}
+
 /* Sidebar Styles */
 .admin-sidebar {
   width: 280px;
@@ -155,6 +162,7 @@
 .sidebar-nav {
   flex: 1;
   padding: 20px 16px;
+  overflow-y: auto;
 }
 
 .sidebar-item {
